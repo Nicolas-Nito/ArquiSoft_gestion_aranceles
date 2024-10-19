@@ -13,6 +13,32 @@ services:
     depends_on:
       - mongodb
       - rabbitmq
+    environment:
+      - MONGO_ADMIN_USER=${MONGO_ADMIN_USER}
+      - MONGO_ADMIN_PASS=${MONGO_ADMIN_PASS}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/  # URL de RabbitMQ para conectarse
+    env_file:
+      - .env
+  payment-container:
+    build:
+      context: ./
+      dockerfile: ./deploy/local/python.Dockerfile
+    ports:
+      - "8002:8002"
+    volumes:
+      - .:/app
+    command: uvicorn app.payment.main:app --reload --host 0.0.0.0 --port 8002
+    networks:
+      - tarea-unidad-04
+    depends_on:
+      - mongodb
+      - rabbitmq
+    environment:
+      - MONGO_ADMIN_USER=${MONGO_ADMIN_USER}
+      - MONGO_ADMIN_PASS=${MONGO_ADMIN_PASS}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/  # URL de RabbitMQ para conectarse
+    env_file:
+      - .env
   
   benefits-container:
     build:
