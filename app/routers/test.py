@@ -1,8 +1,10 @@
 from fastapi import APIRouter, HTTPException
 
+prefix = "/api/v1"
+
 router = APIRouter(
-    prefix="/test",
-    tags=["test"],
+    prefix=prefix,
+    tags=["api"],
 )
 
 
