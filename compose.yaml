@@ -12,6 +12,19 @@ services:
       - tarea-unidad-04
     depends_on:
       - mongodb
+  payment-container:
+    build:
+      context: ./
+      dockerfile: ./deploy/local/python.Dockerfile
+    ports:
+      - "8001:8001"
+    volumes:
+      - .:/app
+    command: uvicorn app.payment.main:app --reload --host 0.0.0.0 --port 8001
+    networks:
+      - tarea-unidad-04
+    depends_on:
+      - mongodb
   mongodb:
     image: mongo:4.4
     ports:
