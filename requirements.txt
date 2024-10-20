@@ -3,3 +3,5 @@ pydantic>=2.0.0
 celery
 billiard
 twisted
+pymongo>=4.1.1
+requests>=2.28.1
