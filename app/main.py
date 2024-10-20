@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from dotenv import load_dotenv
 
-from .routers import test
+from .routers import benefits
 import logging
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,7 +16,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(test.router)
+app.include_router(benefits.router)
 
 logging.basicConfig(level=logging.INFO)
 
