@@ -120,15 +120,30 @@ def list_benefits(student_id: str, skip: int = 0, limit: int = 10, status: Optio
 
 # Registrar un pago mediante un beneficio
 @app.post("/api/v1/{student_id}/benefits/{benefit_id}/payments", response_model=Payment)
-def register_payment(student_id: str, benefit_id: str, payment: Payment):
-    payment_dict = payment.dict()
+def register_payment(student_id: str, benefit_id: str, description: Optional[str] = None):
+
+    benefit = benefits_collection.find_one({"_id": ObjectId(benefit_id), "student_id": student_id})
+    if benefit is None:
+        raise HTTPException(status_code=404, detail="Benefit not found")
+    
+    amount = benefit["amount"]
+    # Crear el pago
+    payment_id = str(ObjectId())  # Generar un nuevo ObjectId para el pago
+    payment = {
+        'id': payment_id,
+        'amount': amount,
+        'date': datetime.now(),
+        'description': description,
+        'student_id': student_id,
+        'benefit_id': benefit_id,
+    }
     result = benefits_collection.update_one(
         {"_id": ObjectId(benefit_id), "student_id": student_id},
-        {"$push": {"payments": payment_dict}}
+        {"$push": {"payments": payment}}
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=404, detail="Benefit not found")
-    return payment_dict
+    return payment
 
 
 # Actualizar información de un pago mediante un beneficio
