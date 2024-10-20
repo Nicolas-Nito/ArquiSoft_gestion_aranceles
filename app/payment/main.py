@@ -17,6 +17,12 @@ db = mongo_client["payment"]
 app = FastAPI()
 app.include_router(router)
 
+@app.post(f"{prefix}/{{student_id}}/payments")
+def store_payment(student_id: str):
+    #Registrar un pago de un alumno
+    return {"Hello": student_id}
+
+
 @app.get(f"{prefix}/{{student_id}}/payments")
 def get_payments(student_id: str):
     #Listar pagos de un alumno
@@ -28,7 +34,7 @@ def get_payment(student_id: str, payment_id: str):
     return {"Hello": student_id, "Payment": payment_id}
 
 
-@app.get(f"{prefix}/{{student_id}}/debt/{{payment_id}}/payments")
+@app.get(f"{prefix}/{{student_id}}/debts/{{debts_id}}/payments")
 def get_debt_payments(student_id: str, payment_id: str):
     #Listar pagos pendientes de un alumno
     return {"Hello": student_id, "Payment": payment_id}
