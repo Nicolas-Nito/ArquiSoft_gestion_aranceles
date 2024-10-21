@@ -6,10 +6,3 @@ router = APIRouter(
     prefix=prefix,
     tags=["api"],
 )
-
-
-@router.get("/")
-async def test():
-    return {
-        "msg": "ok"
-    }
