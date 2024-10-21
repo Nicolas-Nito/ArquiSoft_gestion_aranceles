@@ -12,7 +12,56 @@ services:
       - tarea-unidad-04
     depends_on:
       - mongodb
+      - rabbitmq
+    environment:
+      - MONGO_ADMIN_USER=${MONGO_ADMIN_USER}
+      - MONGO_ADMIN_PASS=${MONGO_ADMIN_PASS}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/  # URL de RabbitMQ para conectarse
+    env_file:
+      - .env
+
+  debt-container:
+    build:
+      context: ./
+      dockerfile: ./deploy/local/python.Dockerfile
+    ports:
+      - "8003:8003"
+    volumes:
+      - .:/app
+    command: uvicorn app.payment.main:app --reload --host 0.0.0.0 --port 8003
+    networks:
+      - tarea-unidad-04
+    depends_on:
+      - mongodb
+    environment:
+      - MONGO_ADMIN_USER=${MONGO_ADMIN_USER}
+      - MONGO_ADMIN_PASS=${MONGO_ADMIN_PASS}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/  # URL de RabbitMQ para conectarse
+    env_file:
+      - .env
+
   payment-container:
+    build:
+      context: ./
+      dockerfile: ./deploy/local/python.Dockerfile
+    ports:
+      - "8002:8002"
+    volumes:
+      - .:/app
+    command: uvicorn app.payment.main:app --reload --host 0.0.0.0 --port 8002
+    networks:
+      - tarea-unidad-04
+    depends_on:
+      - mongodb
+      - rabbitmq
+    environment:
+      - MONGO_ADMIN_USER=${MONGO_ADMIN_USER}
+      - MONGO_ADMIN_PASS=${MONGO_ADMIN_PASS}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/  # URL de RabbitMQ para conectarse
+    env_file:
+      - .env
+  
+  benefits-container:
     build:
       context: ./
       dockerfile: ./deploy/local/python.Dockerfile
@@ -20,11 +69,19 @@ services:
       - "8001:8001"
     volumes:
       - .:/app
-    command: uvicorn app.payment.main:app --reload --host 0.0.0.0 --port 8001
+    command: uvicorn app.benefits.main:app --reload --host 0.0.0.0 --port 8001
     networks:
       - tarea-unidad-04
     depends_on:
       - mongodb
+      - rabbitmq
+    environment:
+      - MONGO_ADMIN_USER=${MONGO_ADMIN_USER}
+      - MONGO_ADMIN_PASS=${MONGO_ADMIN_PASS}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/  # URL de RabbitMQ para conectarse
+    env_file:
+      - .env
+
   mongodb:
     image: mongo:4.4
     ports:
@@ -36,6 +93,20 @@ services:
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ADMIN_USER}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ADMIN_PASS}
+  
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"  # Puerto para las conexiones AMQP
+      - "15672:15672"  # Puerto para la interfaz de administración web
+    networks:
+      - tarea-unidad-04
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+
+
 volumes:
   mongodb-data:
 networks:

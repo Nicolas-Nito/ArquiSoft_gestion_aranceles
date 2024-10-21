@@ -54,3 +54,10 @@ watchfiles==0.24.0
 wcwidth==0.2.13
 websockets==13.1
 zope.interface==7.1.0
+fastapi[standard]
+pydantic>=2.0.0
+celery
+billiard
+twisted
+pymongo
+pika
