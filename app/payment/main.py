@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Form
+from fastapi import FastAPI, Form, HTTPException
 from pydantic import BaseModel
 
 import time
@@ -6,6 +6,8 @@ from bson.objectid import ObjectId
 import pymongo
 import os
 from dotenv import load_dotenv
+import pika
+from pika.exchange_type import ExchangeType
 
 from ..routers.test import prefix, router
 
@@ -22,6 +24,16 @@ db = mongo_client["payment"]
 
 app = FastAPI()
 app.include_router(router)
+# Crear una función para conectarse a RabbitMQ
+def get_rabbitmq_connection():
+    try:
+        params = pika.URLParameters(rabbitmq_url)
+        connection = pika.BlockingConnection(params)
+       
+        return connection
+    except Exception as e:
+        print(f"Error connecting to RabbitMQ: {e}")
+        return None
 
 # Publicar un mensaje en RabbitMQ
 def publish_event(event: str, body: dict):
