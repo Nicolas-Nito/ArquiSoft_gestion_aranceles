@@ -4,3 +4,4 @@ celery
 billiard
 twisted
 pymongo
+pika
