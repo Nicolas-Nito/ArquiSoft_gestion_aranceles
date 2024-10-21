@@ -44,11 +44,11 @@ def publish_event(event: str, body: dict):
     channel = connection.channel()
     channel.exchange_declare(exchange='topic_exchange', exchange_type=ExchangeType.topic)
     # Declarar una cola llamada 'hello'
-    queue_benefits=channel.queue_declare(queue='benefits', durable=True)
+    queue_debts=channel.queue_declare(queue='debts', durable=True)
     queue_payments=channel.queue_declare(queue='payments', durable=True)
 
     # Enlazar la cola con el exchange
-    channel.queue_bind(exchange='topic_exchange', queue=queue_benefits.method.queue, routing_key='benefits.*.*')
+    channel.queue_bind(exchange='topic_exchange', queue=queue_debts.method.queue, routing_key='debts.*.*')
     channel.queue_bind(exchange='topic_exchange', queue=queue_payments.method.queue, routing_key='payments.*.*')
     # Publicar el evento en RabbitMQ
     channel.basic_publish(
@@ -74,6 +74,8 @@ def store_debt(student_id: str, amount: float = Form(...), description: str = Fo
     }
 
     result = db["debts"].insert_one(debt_data)
+    debt_id = str(result.inserted_id)
+    publish_event(f"debts.{debt_id}.created", debt_data)
 
     return {"succesfull inster in id": str(result.inserted_id)}
 
@@ -87,6 +89,7 @@ def update_debt(student_id: str, debt_id: str, amount: float = Form(...), descri
         "paid": paid
     }
     db["debts"].update_one({"_id": ObjectId(debt_id)}, {"$set": debt_data})
+    publish_event(f"debts.{debt_id}.updated", debt_data)
     return {"Hello": student_id, "Debt": debt_id}
 
 @app.delete(f"{prefix}/{{student_id}}/debts/{{debt_id}}")
@@ -96,6 +99,7 @@ def delete_debt(student_id: str, debt_id: str):
     db["deleted_debts"].insert_one(debt_data)
     db["debts"].delete_one({"_id": ObjectId(debt_id)})
 
+    publish_event(f"debts.{debt_id}.deleted", {"debt_id": debt_id})
     return {"Hello": student_id, "Debt": debt_id}
 
 @app.get(f"{prefix}/{{student_id}}/debts/{{debt_id}}")
@@ -121,7 +125,6 @@ def enroll_student(student_id: str, semester: str = Form(...)):
     }
 
     result = db["enrollments"].insert_one(enrollment_data)
-
     return {"succesfull inster in id": str(result.inserted_id)}
 
 @app.put(f"{prefix}/{{student_id}}/enrollments/{{enrollment_id}}")

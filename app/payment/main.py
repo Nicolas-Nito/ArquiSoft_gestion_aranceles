@@ -44,11 +44,9 @@ def publish_event(event: str, body: dict):
     channel = connection.channel()
     channel.exchange_declare(exchange='topic_exchange', exchange_type=ExchangeType.topic)
     # Declarar una cola llamada 'hello'
-    queue_benefits=channel.queue_declare(queue='benefits', durable=True)
-    queue_payments=channel.queue_declare(queue='payments', durable=True)
 
+    queue_payments=channel.queue_declare(queue='payments', durable=True)
     # Enlazar la cola con el exchange
-    channel.queue_bind(exchange='topic_exchange', queue=queue_benefits.method.queue, routing_key='benefits.*.*')
     channel.queue_bind(exchange='topic_exchange', queue=queue_payments.method.queue, routing_key='payments.*.*')
     # Publicar el evento en RabbitMQ
     channel.basic_publish(
@@ -73,7 +71,8 @@ def store_payment(student_id: str, amount: float = Form(...), description: str =
     }
 
     result = db["payments"].insert_one(payment_data)
-
+    payment_id = str(result.inserted_id)
+    publish_event(f"payments.{payment_id}.created", payment_data)
     return {"succesfull inster in id": str(result.inserted_id)}
 
 @app.put(f"{prefix}/{{student_id}}/payments/{{payment_id}}")
@@ -85,6 +84,7 @@ def update_payment(student_id: str, payment_id: str, amount: float = Form(...), 
         "student_id": int(student_id)
     }
     db["payments"].update_one({"_id": ObjectId(payment_id)}, {"$set": payment_data})
+    publish_event(f"payments.{payment_id}.updated", payment_data)
     return {"Hello": student_id, "Payment": payment_id}
 
 @app.delete(f"{prefix}/{{student_id}}/payments/{{payment_id}}")
@@ -94,6 +94,7 @@ def delete_payment(student_id: str, payment_id: str):
     db["deleted_payments"].insert_one(payment_data)
     db["payments"].delete_one({"_id": ObjectId(payment_id)})
 
+    publish_event(f"payments.{payment_id}.deleted", {"student_id": student_id, "payment_id": payment_id})
     return {"Hello": student_id, "Payment": payment_id}
 
 @app.get(f"{prefix}/{{student_id}}/payments")
