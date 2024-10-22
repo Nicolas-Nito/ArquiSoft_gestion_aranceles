@@ -322,6 +322,13 @@ def delete_benefit(student_id: str, benefit_id: str):
 
 @ app.get(f"{prefix}/{{student_id}}/benefits/{{benefit_id}}", summary="Consultar información de un beneficio", tags=["GET"])
 def get_benefit(student_id: str, benefit_id: str):
+    """
+    Obtiene la información detallada de un beneficio específico asignado a un estudiante.
+
+    Parámetros:
+    - student_id: Identificador único del estudiante
+    - benefit_id: Identificador único del beneficio a consultar
+    """
     student = benefits_collection.find_one(
         {"student_id": student_id, "benefits.benefit_id": benefit_id},
         {"benefits.$": 1}
@@ -337,7 +344,16 @@ def get_benefit(student_id: str, benefit_id: str):
 
 
 @ app.get(f"{prefix}/{{student_id}}/benefits", tags=["GET"], summary="Listar todos los beneficios de un estudiante")
-def list_benefits(student_id: str, skip: int = None, limit: int = None, status: str = None):
+def list_benefits(student_id: str, skip: Optional[int] = None, limit: Optional[int] = None, status: Optional[str] = None):
+    """
+    Obtiene la lista de todos los beneficios asociados a un estudiante específico.
+
+    Parámetros:
+    - student_id: Identificador único del estudiante
+    - skip: Número de registros a omitir para la paginación (opcional)
+    - limit: Número máximo de registros a retornar (opcional)
+    - status: Filtro por estado del beneficio ("actived", "inactived" o "expired") (opcional)
+    """
     query = {"student_id": student_id}
     student = benefits_collection.find_one(query)
     if not student:
@@ -362,6 +378,14 @@ def list_benefits(student_id: str, skip: int = None, limit: int = None, status: 
 
 @ app.post(f"{prefix}/{{student_id}}/benefits/{{benefit_id}}/payments", summary="Registrar un pago mediante un beneficio", tags=["POST"])
 def registrar_pago(student_id: str, benefit_id: str, payment: Payment):
+    """
+    Registra un nuevo pago asociado a un beneficio específico de un estudiante.
+
+    Parámetros:
+    - student_id: Identificador único del estudiante
+    - benefit_id: Identificador único del beneficio
+    - payment: Objeto con la información del pago a registrar
+    """
     student = benefits_collection.find_one({"student_id": student_id})
 
     if not student:
@@ -592,6 +616,14 @@ def eliminar_pago(student_id: str, benefit_id: str, payment_id: str):
 
 @ app.get(f"{prefix}/{{student_id}}/benefits/{{benefit_id}}/payments/{{payment_id}}", summary="Consultar información de un pago mediante un beneficio", tags=["GET"])
 def consultar_pago(student_id: str, benefit_id: str, payment_id: str):
+    """
+    Obtiene la información detallada de un pago específico asociado a un beneficio de un estudiante.
+
+    Parámetros:
+    - student_id: Identificador único del estudiante
+    - benefit_id: Identificador único del beneficio asociado al pago
+    - payment_id: Identificador único del pago a consultar
+    """
     student = benefits_collection.find_one({"student_id": student_id})
 
     if not student:
@@ -613,6 +645,16 @@ def consultar_pago(student_id: str, benefit_id: str, payment_id: str):
 
 @ app.get(f"{prefix}/{{student_id}}/benefits/{{benefit_id}}/payments", summary="Listar todos los pagos de un beneficio", tags=["GET"])
 def listar_pagos(student_id: str, benefit_id: str, skip: int = None, limit: int = None, status: str = None):
+    """
+    Obtiene la lista de todos los pagos realizados para un beneficio específico de un estudiante, con opciones de filtrado y paginación.
+
+    Parámetros:
+    - student_id: Identificador único del estudiante
+    - benefit_id: Identificador único del beneficio
+    - skip: Número de registros a omitir para la paginación (opcional)
+    - limit: Número máximo de registros a retornar (opcional)
+    - status: Estado de los pagos a filtrar ("actived", "inactived" o "expired") (opcional)
+    """
     student = benefits_collection.find_one({"student_id": student_id})
 
     if not student:
