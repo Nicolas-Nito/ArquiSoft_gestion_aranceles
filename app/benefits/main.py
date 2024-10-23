@@ -663,13 +663,13 @@ def actualizar_pago(student_id: str, benefit_id: str, payment_id: str, update_pa
 
     # Extraer el payment actualizado
     payment = updated_student["benefits"][0]["payments"][0]
-    payment["description"] = "Pago"
+    #payment.description = "Pago"
 
     publish_event(f"payments.{payment_id}.updated",
                 {
                     "origin_service": "benefits",
                     "student_id": student_id,
-                    "data": payment.dict()
+                    "data": payment
                 })
 
     return {
