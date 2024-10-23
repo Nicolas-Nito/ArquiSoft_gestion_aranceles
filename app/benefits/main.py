@@ -1,5 +1,6 @@
+import threading
 from pydantic import BaseModel, ConfigDict
-from fastapi import FastAPI, APIRouter, HTTPException, Request
+from fastapi import FastAPI, APIRouter, HTTPException, Request, requests
 from pymongo import MongoClient
 from pydantic import BaseModel, Field
 from bson import ObjectId
@@ -10,6 +11,7 @@ from ..routers.test import prefix, router
 import pika
 from pika.exchange_type import ExchangeType
 from typing import Optional
+import json
 
 # Obtener las credenciales desde el entorno
 rabbitmq_url = os.getenv("RABBITMQ_URL")
@@ -24,6 +26,66 @@ benefits_collection = db["benefits"]
 
 app = FastAPI()
 app.include_router(router)
+
+#---------------Consumer------------------------------
+def callback(ch, method, properties, body):
+    print(" [x] Received %r" % body)
+    message = json.loads(body)
+    print(f" [x] Received {message}")
+    origin_service = message.get('origin_service')
+    # Si el mensaje es de este mismo servicio, lo ignoramos.
+    if origin_service == "payments":
+        print("Ignoring message from the same service")
+        return
+    
+    event = method.routing_key
+    #split the event to get the action
+    _,id,action= event.split('.')
+
+    if action == "created":
+        # Get the student_id and the data from the message
+        student_id = message.get("student_id")
+        data = message.get("data")
+        # Insert the data into the database
+        register_benefit(student_id, Benefit(**data))
+        print("[x] Benefit created")
+
+    elif action == "updated":
+        # Get the student_id and the data from the message
+        student_id = message.get("student_id")
+        data = message.get("data")
+        # Insert the data into the database
+        update_benefit(student_id, id, UpdateBenefit(**data))
+        print("[x] Benefit updated")
+
+    elif action == "deleted":
+        # Get the student_id and the data from the message
+        student_id = message.get("student_id")
+        data = message.get("data")
+        # Insert the data into the database
+        delete_benefit(student_id, id)
+        print("[x] Benefit deleted")
+
+    ch.basic_ack(delivery_tag=method.delivery_tag)
+
+def Consumer():
+    # Crear una conexión con RabbitMQ para escuchar los eventos
+    print("Connecting to RabbitMQ...")
+    connection = get_rabbitmq_connection()
+    channel = connection.channel()
+    channel.exchange_declare(exchange='topic_exchange', exchange_type=ExchangeType.topic)
+    queue = channel.queue_declare(queue='benefits', durable=True)
+    channel.queue_bind(exchange='topic_exchange', queue=queue.method.queue, routing_key='benefits.*.*')
+    channel.basic_consume(queue=queue.method.queue, on_message_callback=callback)
+    print('Waiting for messages...')
+    channel.start_consuming()
+
+@app.on_event("startup")
+def start_rabbitmq_consumer():
+    consumer_thread = threading.Thread(target=Consumer, daemon=True)
+    consumer_thread.start()
+    print("RabbitMQ consumer thread started.")
+
 
 
 class Payment(BaseModel):
@@ -199,8 +261,12 @@ async def register_benefit(student_id: str, benefit: Benefit):
         raise HTTPException(
             status_code=400, detail="No se pudo registrar el beneficio")
 
-    publish_event(f"benefits.{benefit.benefit_id}.created", {
-                  "student_id": student_id, "data": benefit.dict()})
+    publish_event(f"benefits.{benefit.benefit_id}.created",
+                {
+                    "origin_service": "benefits",
+                    "student_id": student_id,
+                    "data": benefit.dict()
+                })
     return {"msg": "Beneficio registrado exitosamente!"}
 
 # Endpoint: Actualizar información de un beneficio (PUT)
@@ -291,11 +357,36 @@ def update_benefit(student_id: str, benefit_id: str, update_benefit: UpdateBenef
     if not updated_student or not updated_student.get("benefits"):
         raise HTTPException(
             status_code=404,
+            detail="Estudiante o beneficio no encontrado"
+        )
+
+    # Obtener el beneficio actualizado
+    updated_student = benefits_collection.find_one(
+        {
+            "student_id": student_id,
+            "benefits.benefit_id": benefit_id
+        },
+        {
+            "benefits": {
+                "$elemMatch": {
+                    "benefit_id": benefit_id
+                }
+            }
+        }
+    )
+
+    if not updated_student or not updated_student.get("benefits"):
+        raise HTTPException(
+            status_code=404,
             detail="No se pudo obtener el beneficio actualizado"
         )
 
-    publish_event(f"benefits.{benefit_id}.updated", {
-                  "student_id": student_id, "data": update_benefit.dict()})
+    publish_event(f"benefits.{benefit_id}.updated", 
+                {
+                    "origin_service": "benefits",
+                    "student_id": student_id,
+                    "data": update_benefit.dict()
+                })
 
     return updated_student["benefits"][0]
 
@@ -313,8 +404,12 @@ def delete_benefit(student_id: str, benefit_id: str):
         raise HTTPException(
             status_code=404, detail="Beneficio o estudiante no encontrado")
 
-    publish_event(f"benefits.{benefit_id}.deleted", {
-                  "student_id": student_id, "benefit_id": benefit_id})
+    publish_event(f"benefits.{benefit_id}.deleted", 
+                {
+                    "origin_service": "benefits",
+                    "student_id": student_id,
+                    "benefit_id": benefit_id
+                })
     return {"msg": "Beneficio eliminado exitosamente"}
 
 # Endpoint: Consultar información de un beneficio (GET)
@@ -432,8 +527,12 @@ def registrar_pago(student_id: str, benefit_id: str, payment: Payment):
                     {"$push": {"benefits.$.payments": payment.dict()}}
                 )
 
-            publish_event(f"payments.{payment.payment_id}.created", {
-                          "student_id": student_id, "data": payment.dict()})
+            publish_event(f"payments.{payment.payment_id}.created",
+                        {
+                            "origin_service": "benefits",
+                            "student_id": student_id,
+                            "data": payment.dict()
+                        })
             return {"msg": "Pago registrado exitosamente", "payment_id": payment.payment_id}
 
     raise HTTPException(status_code=404, detail="Beneficio no encontrado")
@@ -538,14 +637,41 @@ def actualizar_pago(student_id: str, benefit_id: str, payment_id: str, update_pa
     if not updated_student or not updated_student.get("benefits"):
         raise HTTPException(
             status_code=404,
+            detail="Estudiante, beneficio o pago no encontrado"
+        )
+
+    # Obtener el payment actualizado
+    updated_student = benefits_collection.find_one(
+        {
+            "student_id": student_id,
+            "benefits": {
+                "$elemMatch": {
+                    "benefit_id": benefit_id,
+                    "payments": {
+                        "$elemMatch": {
+                            "payment_id": payment_id
+                        }
+                    }
+                }
+            }
+        }
+    )
+
+    if not updated_student or not updated_student.get("benefits"):
+        raise HTTPException(
+            status_code=404,
             detail="No se pudo obtener el pago actualizado"
         )
 
     # Extraer el payment actualizado
     payment = updated_student["benefits"][0]["payments"][0]
 
-    publish_event(f"payments.{payment_id}.updated", {
-                  "student_id": student_id, "data": update_payment.dict()})
+    publish_event(f"payments.{payment_id}.updated",
+                {
+                    "origin_service": "benefits",
+                    "student_id": student_id,
+                    "data": update_payment.dict()
+                })
 
     return {
         "payment": payment
@@ -588,6 +714,19 @@ def eliminar_pago(student_id: str, benefit_id: str, payment_id: str):
     if not result["benefits"][0].get("payments"):
         raise HTTPException(
             status_code=404,
+            detail="Estudiante no encontrado"
+        )
+
+    if not result.get("benefits"):
+        raise HTTPException(
+            status_code=404,
+            detail="Beneficio o pago no encontrado"
+        )
+
+    # Accedemos al pago específico
+    if not result["benefits"][0].get("payments"):
+        raise HTTPException(
+            status_code=404,
             detail="Pago no encontrado"
         )
 
@@ -607,8 +746,12 @@ def eliminar_pago(student_id: str, benefit_id: str, payment_id: str):
             {"p.payment_id": payment_id}
         ]
     )
-    publish_event(f"payments.{payment_id}.deleted", {
-                  "student_id": student_id, "payment_id": payment_id})
+    publish_event(f"payments.{payment_id}.deleted",
+                {
+                    "origin_service": "benefits",
+                    "student_id": student_id,
+                    "payment_id": payment_id
+                })
     return {"msg": "Pago eliminado exitosamente"}
 
 # Endpoint: Consultar información de un pago mediante un beneficio (GET)
@@ -680,3 +823,4 @@ def listar_pagos(student_id: str, benefit_id: str, skip: int = None, limit: int 
             return payments
 
     raise HTTPException(status_code=404, detail="Beneficio no encontrado")
+
