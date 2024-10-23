@@ -32,7 +32,7 @@ class Payment(BaseModel):
             "example": {
                 "payment_id": "PAY123",
                 "amount": 1500.00,
-                "date": datetime.now().isoformat()
+                "date": datetime
             }
         },
         populate_by_name=True,
@@ -50,7 +50,7 @@ class UpdatePayment(BaseModel):
         json_schema_extra={
             "example": {
                 "amount": 2000.00,
-                "date": datetime.now().isoformat(),
+                "date": datetime,
                 "status": "actived"
             }
         },
@@ -71,8 +71,8 @@ class Benefit(BaseModel):
                 "name": "CAE",
                 "description": "Descripción del CAE",
                 "amount": 500.00,
-                "start_date": datetime.now().isoformat(),
-                "end_date": datetime.now().isoformat()
+                "start_date": datetime,
+                "end_date": datetime
             }
         },
         populate_by_name=True,
@@ -95,8 +95,8 @@ class UpdateBenefit(BaseModel):
                 "name": "Nombre de pago actualizado",
                 "description": "Descripción de pago actualizado",
                 "amount": 600.00,
-                "start_date": datetime.now().isoformat(),
-                "end_date": datetime.now().isoformat(),
+                "start_date": datetime,
+                "end_date": datetime,
                 "status": "actived"
             }
         },
