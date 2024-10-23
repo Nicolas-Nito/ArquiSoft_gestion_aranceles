@@ -1,3 +1,6 @@
+from datetime import datetime
+import json
+import threading
 from fastapi import FastAPI, Form, HTTPException
 from pydantic import BaseModel
 
@@ -25,19 +28,84 @@ db = mongo_client["debt"]
 
 app = FastAPI()
 app.include_router(router)
+#---------------Consumer------------------------------
+# Crear una función para conectarse a RabbitMQ
 def get_rabbitmq_connection():
     try:
         params = pika.URLParameters(rabbitmq_url)
         connection = pika.BlockingConnection(params)
-       
+        print("Connected to RabbitMQ")
         return connection
     except Exception as e:
         print(f"Error connecting to RabbitMQ: {e}")
         return None
+    
+def callback(ch, method, properties, body):
+    message = json.loads(body)
+    print(f" [x] Received {message}")
+    origin_service = message.get('origin_service')
+    # Si el mensaje es de este mismo servicio, lo ignoramos.
+    if origin_service == "debts":
+        print("Ignoring message from the same service")
+        return
+    
+    event = method.routing_key
+    #split the event to get the action
+    _,id,action= event.split('.')
 
+    if action == "created":
+        # Get the student_id and the data from the message
+        student_id = message.get("student_id")
+        data = message.get("data")
+        # Insert the data into the database
+        store_debt(student_id, data["amount"], data["description"])
+        print("[x] Debt created")
+
+    elif action == "updated":
+        # Get the student_id and the data from the message
+        student_id = message.get("student_id")
+        data = message.get("data")
+        # Insert the data into the database
+        update_debt(student_id, id, data["amount"], data["description"], data["paid"])
+        print("[x] Debt updated")
+
+    elif action == "deleted":
+        # Get the student_id and the data from the message
+        student_id = message.get("student_id")
+        data = message.get("data")
+        # Insert the data into the database
+        delete_debt(student_id, id)
+        print("[x] Debt deleted")
+
+    ch.basic_ack(delivery_tag=method.delivery_tag)
+
+def Consumer():
+    # Crear una conexión con RabbitMQ para escuchar los eventos
+    print("Connecting to RabbitMQ...")
+    connection = get_rabbitmq_connection()
+    channel = connection.channel()
+    channel.exchange_declare(exchange='topic_exchange', exchange_type=ExchangeType.topic)
+    queue = channel.queue_declare(queue='debts', durable=True)
+    channel.queue_bind(exchange='topic_exchange', queue=queue.method.queue, routing_key='debts.*.*')
+    channel.basic_consume(queue=queue.method.queue, on_message_callback=callback)
+    print('Waiting for messages...')
+    channel.start_consuming()
+
+@app.on_event("startup")
+def start_rabbitmq_consumer():
+    consumer_thread = threading.Thread(target=Consumer, daemon=True)
+    consumer_thread.start()
+    print("RabbitMQ consumer thread started.")
+
+#---------------Publish to Rabbit-----------------------------------
+def json_serial(obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        elif isinstance(obj, ObjectId):
+            return str(obj)
+        raise TypeError(f"Type {type(obj)} not serializable")
 # Publicar un mensaje en RabbitMQ
 def publish_event(event: str, body: dict):
-    
     connection = get_rabbitmq_connection()
     if connection is None:
         raise HTTPException(status_code=500, detail="Cannot connect to RabbitMQ") 
@@ -54,14 +122,14 @@ def publish_event(event: str, body: dict):
     channel.basic_publish(
         exchange='topic_exchange',  # O puedes usar un exchange personalizado
         routing_key=event,  # Tipo de evento como clave de enrutamiento
-        body=str(body),
-        properties=pika.BasicProperties(
-            delivery_mode=2,  # Hacer el mensaje persistente
-        )
+        body=json.dumps(body,default=json_serial,ensure_ascii=False),
+        # properties=pika.BasicProperties(
+        #     delivery_mode=2,  # Hacer el mensaje persistente
+        # )
     )
     print(f" [x] Sent to Queue: {event}")
     connection.close()
-
+#----------------------End Points-------------------------------
 @app.post(f"{prefix}/{{student_id}}/debts")
 def store_debt(student_id: str, amount: float = Form(...), description: str = Form(...)):
     #Registrar un pago de un alumno
@@ -75,7 +143,12 @@ def store_debt(student_id: str, amount: float = Form(...), description: str = Fo
 
     result = db["debts"].insert_one(debt_data)
     debt_id = str(result.inserted_id)
-    publish_event(f"debts.{debt_id}.created", debt_data)
+    publish_event(f"debts.{debt_id}.created",
+                {
+                    "origin_service": "debts",
+                    "student_id": student_id,
+                    "data":debt_data
+                })
 
     return {"succesfull inster in id": str(result.inserted_id)}
 
@@ -89,7 +162,12 @@ def update_debt(student_id: str, debt_id: str, amount: float = Form(...), descri
         "paid": paid
     }
     db["debts"].update_one({"_id": ObjectId(debt_id)}, {"$set": debt_data})
-    publish_event(f"debts.{debt_id}.updated", debt_data)
+    publish_event(f"debts.{debt_id}.updated",
+                {
+                    "origin_service": "debts",
+                    "student_id": student_id,
+                    "data": debt_data
+                })
     return {"Hello": student_id, "Debt": debt_id}
 
 @app.delete(f"{prefix}/{{student_id}}/debts/{{debt_id}}")
@@ -99,7 +177,12 @@ def delete_debt(student_id: str, debt_id: str):
     db["deleted_debts"].insert_one(debt_data)
     db["debts"].delete_one({"_id": ObjectId(debt_id)})
 
-    publish_event(f"debts.{debt_id}.deleted", {"debt_id": debt_id})
+    publish_event(f"debts.{debt_id}.deleted",
+                {
+                    "origin_service": "debts",
+                    "student_id": student_id,
+                    "debt_id": debt_id
+                })
     return {"Hello": student_id, "Debt": debt_id}
 
 @app.get(f"{prefix}/{{student_id}}/debts/{{debt_id}}")

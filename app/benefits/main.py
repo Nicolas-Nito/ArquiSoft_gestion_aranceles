@@ -28,6 +28,17 @@ app = FastAPI()
 app.include_router(router)
 
 #---------------Consumer------------------------------
+# Crear una función para conectarse a RabbitMQ
+def get_rabbitmq_connection():
+    try:
+        params = pika.URLParameters(rabbitmq_url)
+        connection = pika.BlockingConnection(params)
+        print("Connected to RabbitMQ")
+
+        return connection
+    except Exception as e:
+        print(f"Error connecting to RabbitMQ: {e}")
+        return None
 def callback(ch, method, properties, body):
     message = json.loads(body)
     print(f" [x] Received {message}")
@@ -86,7 +97,45 @@ def start_rabbitmq_consumer():
     print("RabbitMQ consumer thread started.")
 
 
+#--------------------Publish to Rabbit---------------------------------
+def json_serial(obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        elif isinstance(obj, ObjectId):
+            return str(obj)
+        raise TypeError(f"Type {type(obj)} not serializable")
+# Publicar un mensaje en RabbitMQ
+def publish_event(event: str, body: dict):
 
+    connection = get_rabbitmq_connection()
+    if connection is None:
+        raise HTTPException(
+            status_code=500, detail="Cannot connect to RabbitMQ")
+    channel = connection.channel()
+    channel.exchange_declare(exchange='topic_exchange',
+                             exchange_type=ExchangeType.topic)
+    # Declarar una cola llamada 'hello'
+    queue_benefits = channel.queue_declare(queue='benefits', durable=True)
+    queue_payments = channel.queue_declare(queue='payments', durable=True)
+
+    # Enlazar la cola con el exchange
+    channel.queue_bind(exchange='topic_exchange',
+                       queue=queue_benefits.method.queue, routing_key='benefits.*.*')
+    channel.queue_bind(exchange='topic_exchange',
+                       queue=queue_payments.method.queue, routing_key='payments.*.*')
+    # Publicar el evento en RabbitMQ
+    channel.basic_publish(
+        exchange='topic_exchange',  # O puedes usar un exchange personalizado
+        routing_key=event,  # Tipo de evento como clave de enrutamiento
+        body=json.dumps(body,default=json_serial,ensure_ascii=False),
+        # properties=pika.BasicProperties(
+        #     delivery_mode=2,  # Hacer el mensaje persistente
+        # )
+    )
+    print(f" [x] Sent to Queue: {event}")
+    connection.close()
+
+#----------------------Schemas-------------------------------
 class Payment(BaseModel):
     payment_id: str
     amount: float
@@ -166,58 +215,9 @@ class UpdateBenefit(BaseModel):
         }
     }
 
-# Crear una función para conectarse a RabbitMQ
-def json_serial(obj):
-        if isinstance(obj, datetime):
-            return obj.isoformat()
-        raise TypeError(f"Type {type(obj)} not serializable")
 
-def get_rabbitmq_connection():
-    try:
-        params = pika.URLParameters(rabbitmq_url)
-        connection = pika.BlockingConnection(params)
-
-        return connection
-    except Exception as e:
-        print(f"Error connecting to RabbitMQ: {e}")
-        return None
-
-# Publicar un mensaje en RabbitMQ
-
-
-def publish_event(event: str, body: dict):
-
-    connection = get_rabbitmq_connection()
-    if connection is None:
-        raise HTTPException(
-            status_code=500, detail="Cannot connect to RabbitMQ")
-    channel = connection.channel()
-    channel.exchange_declare(exchange='topic_exchange',
-                             exchange_type=ExchangeType.topic)
-    # Declarar una cola llamada 'hello'
-    queue_benefits = channel.queue_declare(queue='benefits', durable=True)
-    queue_payments = channel.queue_declare(queue='payments', durable=True)
-
-    # Enlazar la cola con el exchange
-    channel.queue_bind(exchange='topic_exchange',
-                       queue=queue_benefits.method.queue, routing_key='benefits.*.*')
-    channel.queue_bind(exchange='topic_exchange',
-                       queue=queue_payments.method.queue, routing_key='payments.*.*')
-    # Publicar el evento en RabbitMQ
-    channel.basic_publish(
-        exchange='topic_exchange',  # O puedes usar un exchange personalizado
-        routing_key=event,  # Tipo de evento como clave de enrutamiento
-        body=json.dumps(body,default=json_serial,ensure_ascii=False),
-        # properties=pika.BasicProperties(
-        #     delivery_mode=2,  # Hacer el mensaje persistente
-        # )
-    )
-    print(f" [x] Sent to Queue: {event}")
-    connection.close()
-
+#----------------------End Points-------------------------------
 # Endpoint: Registrar un beneficio (POST)
-
-
 @app.post(f"{prefix}/{{student_id}}/benefits", summary="Registrar un Beneficio",
           description="""
   `benefit_id`: ID del beneficio.\n
