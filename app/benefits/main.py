@@ -29,12 +29,11 @@ app.include_router(router)
 
 #---------------Consumer------------------------------
 def callback(ch, method, properties, body):
-    print(" [x] Received %r" % body)
     message = json.loads(body)
     print(f" [x] Received {message}")
     origin_service = message.get('origin_service')
     # Si el mensaje es de este mismo servicio, lo ignoramos.
-    if origin_service == "payments":
+    if origin_service == "benefits":
         print("Ignoring message from the same service")
         return
     
@@ -168,7 +167,10 @@ class UpdateBenefit(BaseModel):
     }
 
 # Crear una función para conectarse a RabbitMQ
-
+def json_serial(obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        raise TypeError(f"Type {type(obj)} not serializable")
 
 def get_rabbitmq_connection():
     try:
@@ -205,10 +207,10 @@ def publish_event(event: str, body: dict):
     channel.basic_publish(
         exchange='topic_exchange',  # O puedes usar un exchange personalizado
         routing_key=event,  # Tipo de evento como clave de enrutamiento
-        body=str(body),
-        properties=pika.BasicProperties(
-            delivery_mode=2,  # Hacer el mensaje persistente
-        )
+        body=json.dumps(body,default=json_serial,ensure_ascii=False),
+        # properties=pika.BasicProperties(
+        #     delivery_mode=2,  # Hacer el mensaje persistente
+        # )
     )
     print(f" [x] Sent to Queue: {event}")
     connection.close()
@@ -225,7 +227,7 @@ def publish_event(event: str, body: dict):
   `start_date`: Fecha de inicio del beneficio (Ejemplo: 2024-10-20T22:16:23.930Z).\n
   `end_date`: Fecha de finalización del beneficio (Ejemplo: 2024-10-20T22:16:23.930Z).\n
 """, tags=["POST"])
-async def register_benefit(student_id: str, benefit: Benefit):
+def register_benefit(student_id: str, benefit: Benefit):
     student_result = benefits_collection.find_one(
         {"student_id": student_id})
     if student_result:
