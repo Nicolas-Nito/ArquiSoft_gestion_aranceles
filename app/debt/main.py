@@ -95,6 +95,7 @@ def Consumer():
 def start_rabbitmq_consumer():
     consumer_thread = threading.Thread(target=Consumer, daemon=True)
     consumer_thread.start()
+    #Consumer()
     print("RabbitMQ consumer thread started.")
 
 #---------------Publish to Rabbit-----------------------------------

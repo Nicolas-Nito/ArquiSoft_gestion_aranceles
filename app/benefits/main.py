@@ -94,6 +94,7 @@ def Consumer():
 def start_rabbitmq_consumer():
     consumer_thread = threading.Thread(target=Consumer, daemon=True)
     consumer_thread.start()
+    #Consumer()
     print("RabbitMQ consumer thread started.")
 
 
@@ -140,6 +141,7 @@ class Payment(BaseModel):
     payment_id: str
     amount: float
     date: datetime
+    description: Optional[str] = None
 
     model_config = {
         "json_schema_extra": {
@@ -522,7 +524,7 @@ def registrar_pago(student_id: str, benefit_id: str, payment: Payment):
                     {"student_id": student_id, "benefits.benefit_id": benefit_id},
                     {"$push": {"benefits.$.payments": payment.dict()}}
                 )
-
+            payment.description= "Pago"
             publish_event(f"payments.{payment.payment_id}.created",
                         {
                             "origin_service": "benefits",
@@ -661,12 +663,13 @@ def actualizar_pago(student_id: str, benefit_id: str, payment_id: str, update_pa
 
     # Extraer el payment actualizado
     payment = updated_student["benefits"][0]["payments"][0]
+    payment["description"] = "Pago"
 
     publish_event(f"payments.{payment_id}.updated",
                 {
                     "origin_service": "benefits",
                     "student_id": student_id,
-                    "data": update_payment.dict()
+                    "data": payment.dict()
                 })
 
     return {

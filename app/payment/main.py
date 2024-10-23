@@ -96,6 +96,7 @@ def Consumer():
 def start_rabbitmq_consumer():
     consumer_thread = threading.Thread(target=Consumer, daemon=True)
     consumer_thread.start()
+    #Consumer()
     print("RabbitMQ consumer thread started.")
 
 #---------------Publish to Rabbit-----------------------------------
@@ -131,6 +132,11 @@ def publish_event(event: str, body: dict):
     connection.close()
 
 #----------------------End Points-------------------------------
+# @app.get(f"{prefix}/")
+# def iniciarConsumer():
+#     Consumer()
+#     return {"Hello": "iniciado"}
+
 @app.post(f"{prefix}/{{student_id}}/payments")
 def store_payment(student_id: str, amount: float = Form(...), description: str = Form(...)):
     #Registrar un pago de un alumno
