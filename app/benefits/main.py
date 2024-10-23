@@ -89,59 +89,38 @@ def start_rabbitmq_consumer():
 
 
 class Payment(BaseModel):
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "payment_id": "PAY123",
-                "amount": 1500.00,
-                "date": datetime
-            }
-        },
-        populate_by_name=True,
-        validate_assignment=True,
-        str_strip_whitespace=True,
-        strict=True
-    )
     payment_id: str
     amount: float
     date: datetime
 
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "payment_id": "PAY123",
+                "amount": 1500.00,
+                "date": "2024-10-20T22:16:23.930Z"
+            }
+        }
+    }
+
 
 class UpdatePayment(BaseModel):
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "amount": 2000.00,
-                "date": datetime,
-                "status": "actived"
-            }
-        },
-        populate_by_name=True,
-        validate_assignment=True,
-        str_strip_whitespace=True
-    )
     amount: Optional[float] = None
     date: Optional[datetime] = None
     status: Optional[str] = None
 
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "amount": 2000.00,
+                "date": "2024-10-20T22:16:23.930Z",
+                "status": "actived"
+            }
+        }
+    }
+
 
 class Benefit(BaseModel):
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "benefit_id": "BEN456",
-                "name": "CAE",
-                "description": "Descripción del CAE",
-                "amount": 500.00,
-                "start_date": datetime,
-                "end_date": datetime
-            }
-        },
-        populate_by_name=True,
-        validate_assignment=True,
-        str_strip_whitespace=True,
-        strict=True
-    )
     benefit_id: str
     name: str
     description: str
@@ -149,29 +128,44 @@ class Benefit(BaseModel):
     start_date: datetime
     end_date: datetime
 
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "benefit_id": "BEN456",
+                    "name": "CAE",
+                    "description": "Descripción del CAE",
+                    "amount": 500.00,
+                    "start_date": "2024-10-20T22:16:23.930Z",
+                    "end_date": "2024-10-20T22:16:23.930Z"
+                }
+            ]
+        }
+    }
+
 
 class UpdateBenefit(BaseModel):
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "name": "Nombre de pago actualizado",
-                "description": "Descripción de pago actualizado",
-                "amount": 600.00,
-                "start_date": datetime,
-                "end_date": datetime,
-                "status": "actived"
-            }
-        },
-        populate_by_name=True,
-        validate_assignment=True,
-        str_strip_whitespace=True
-    )
     name: Optional[str] = None
     description: Optional[str] = None
     amount: Optional[float] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
     status: Optional[str] = None
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "name": "Nombre de pago actualizado",
+                    "description": "Descripción de pago actualizado",
+                    "amount": 600.00,
+                    "start_date": "2024-10-20T22:16:23.930Z",
+                    "end_date": "2024-10-20T22:16:23.930Z",
+                    "status": "actived"
+                }
+            ]
+        }
+    }
 
 # Crear una función para conectarse a RabbitMQ
 
