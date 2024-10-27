@@ -33,6 +33,29 @@ services:
       - tarea-unidad-04
     depends_on:
       - mongodb
+      - rabbitmq
+    environment:
+      - MONGO_ADMIN_USER=${MONGO_ADMIN_USER}
+      - MONGO_ADMIN_PASS=${MONGO_ADMIN_PASS}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/  # URL de RabbitMQ para conectarse
+    env_file:
+      - .env
+
+  debt-consumer:
+    build:
+      context: ./
+      dockerfile: ./deploy/local/python.Dockerfile
+    ports:
+      - "8006:8006"
+    volumes:
+      - .:/app
+    command: python -m app.debt.consumer
+    networks:
+      - tarea-unidad-04
+    depends_on:
+      - mongodb
+      - rabbitmq
+      - debt-container
     environment:
       - MONGO_ADMIN_USER=${MONGO_ADMIN_USER}
       - MONGO_ADMIN_PASS=${MONGO_ADMIN_PASS}
@@ -60,6 +83,28 @@ services:
       - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/  # URL de RabbitMQ para conectarse
     env_file:
       - .env
+
+  payment-consumer:
+    build:
+      context: ./
+      dockerfile: ./deploy/local/python.Dockerfile
+    ports:
+      - "8004:8004"
+    volumes:
+      - .:/app
+    command: python -m app.payment.consumer
+    networks:
+      - tarea-unidad-04
+    depends_on:
+      - mongodb
+      - rabbitmq
+      - payment-container
+    environment:
+      - MONGO_ADMIN_USER=${MONGO_ADMIN_USER}
+      - MONGO_ADMIN_PASS=${MONGO_ADMIN_PASS}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/  # URL de RabbitMQ para conectarse
+    env_file:
+      - .env
   
   benefits-container:
     build:
@@ -75,6 +120,28 @@ services:
     depends_on:
       - mongodb
       - rabbitmq
+    environment:
+      - MONGO_ADMIN_USER=${MONGO_ADMIN_USER}
+      - MONGO_ADMIN_PASS=${MONGO_ADMIN_PASS}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/  # URL de RabbitMQ para conectarse
+    env_file:
+      - .env
+
+  benefits-consumer:
+    build:
+      context: ./
+      dockerfile: ./deploy/local/python.Dockerfile
+    ports:
+      - "8005:8005"
+    volumes:
+      - .:/app
+    command: python -m app.benefits.consumer
+    networks:
+      - tarea-unidad-04
+    depends_on:
+      - mongodb
+      - rabbitmq
+      - benefits-container
     environment:
       - MONGO_ADMIN_USER=${MONGO_ADMIN_USER}
       - MONGO_ADMIN_PASS=${MONGO_ADMIN_PASS}

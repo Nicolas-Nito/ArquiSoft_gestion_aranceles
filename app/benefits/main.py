@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import List
 import os
 from ..routers.test import prefix, router
+from ..rabbit.main import publish_event
 import pika
 from pika.exchange_type import ExchangeType
 from typing import Optional
@@ -27,114 +28,7 @@ benefits_collection = db["benefits"]
 app = FastAPI()
 app.include_router(router)
 
-#---------------Consumer------------------------------
-# Crear una función para conectarse a RabbitMQ
-def get_rabbitmq_connection():
-    try:
-        params = pika.URLParameters(rabbitmq_url)
-        connection = pika.BlockingConnection(params)
-        print("Connected to RabbitMQ")
 
-        return connection
-    except Exception as e:
-        print(f"Error connecting to RabbitMQ: {e}")
-        return None
-def callback(ch, method, properties, body):
-    message = json.loads(body)
-    print(f" [x] Received {message}")
-    origin_service = message.get('origin_service')
-    # Si el mensaje es de este mismo servicio, lo ignoramos.
-    if origin_service == "benefits":
-        print("Ignoring message from the same service")
-        return
-    
-    event = method.routing_key
-    #split the event to get the action
-    _,id,action= event.split('.')
-
-    if action == "created":
-        # Get the student_id and the data from the message
-        student_id = message.get("student_id")
-        data = message.get("data")
-        # Insert the data into the database
-        register_benefit(student_id, Benefit(**data))
-        print("[x] Benefit created")
-
-    elif action == "updated":
-        # Get the student_id and the data from the message
-        student_id = message.get("student_id")
-        data = message.get("data")
-        # Insert the data into the database
-        update_benefit(student_id, id, UpdateBenefit(**data))
-        print("[x] Benefit updated")
-
-    elif action == "deleted":
-        # Get the student_id and the data from the message
-        student_id = message.get("student_id")
-        data = message.get("data")
-        # Insert the data into the database
-        delete_benefit(student_id, id)
-        print("[x] Benefit deleted")
-
-    ch.basic_ack(delivery_tag=method.delivery_tag)
-
-def Consumer():
-    # Crear una conexión con RabbitMQ para escuchar los eventos
-    print("Connecting to RabbitMQ...")
-    connection = get_rabbitmq_connection()
-    channel = connection.channel()
-    channel.exchange_declare(exchange='topic_exchange', exchange_type=ExchangeType.topic)
-    queue = channel.queue_declare(queue='benefits', durable=True)
-    channel.queue_bind(exchange='topic_exchange', queue=queue.method.queue, routing_key='benefits.*.*')
-    channel.basic_consume(queue=queue.method.queue, on_message_callback=callback)
-    print('Waiting for messages...')
-    channel.start_consuming()
-
-@app.on_event("startup")
-def start_rabbitmq_consumer():
-    consumer_thread = threading.Thread(target=Consumer, daemon=True)
-    consumer_thread.start()
-    #Consumer()
-    print("RabbitMQ consumer thread started.")
-
-
-#--------------------Publish to Rabbit---------------------------------
-def json_serial(obj):
-        if isinstance(obj, datetime):
-            return obj.isoformat()
-        elif isinstance(obj, ObjectId):
-            return str(obj)
-        raise TypeError(f"Type {type(obj)} not serializable")
-# Publicar un mensaje en RabbitMQ
-def publish_event(event: str, body: dict):
-
-    connection = get_rabbitmq_connection()
-    if connection is None:
-        raise HTTPException(
-            status_code=500, detail="Cannot connect to RabbitMQ")
-    channel = connection.channel()
-    channel.exchange_declare(exchange='topic_exchange',
-                             exchange_type=ExchangeType.topic)
-    # Declarar una cola llamada 'hello'
-    queue_benefits = channel.queue_declare(queue='benefits', durable=True)
-    queue_payments = channel.queue_declare(queue='payments', durable=True)
-
-    # Enlazar la cola con el exchange
-    channel.queue_bind(exchange='topic_exchange',
-                       queue=queue_benefits.method.queue, routing_key='benefits.*.*')
-    channel.queue_bind(exchange='topic_exchange',
-                       queue=queue_payments.method.queue, routing_key='payments.*.*')
-    # Publicar el evento en RabbitMQ
-    channel.basic_publish(
-        exchange='topic_exchange',  # O puedes usar un exchange personalizado
-        routing_key=event,  # Tipo de evento como clave de enrutamiento
-        body=json.dumps(body,default=json_serial,ensure_ascii=False),
-        # properties=pika.BasicProperties(
-        #     delivery_mode=2,  # Hacer el mensaje persistente
-        # )
-    )
-    print(f" [x] Sent to Queue: {event}")
-    connection.close()
 
 #----------------------Schemas-------------------------------
 class Payment(BaseModel):
