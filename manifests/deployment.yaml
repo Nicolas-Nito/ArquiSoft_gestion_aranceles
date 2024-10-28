@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gestion-aranceles
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: gestion-aranceles
+  template:
+    metadata:
+      labels:
+        app: gestion-aranceles
+    spec:
+      containers:
+      - name: gestion-aranceles-container
+        image: juan4sepulveda/gestion_aranceles:latest
+        ports:
+        - containerPort: 80
