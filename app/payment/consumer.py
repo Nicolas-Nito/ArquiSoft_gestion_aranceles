@@ -16,54 +16,69 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Consumer_Payment")
 url = f"http://payment-container:8002/api/v1/"
 
+
 def callback(ch, method, properties, body):
-    
 
     message = json.loads(body)
     logger.info(f" [x] Received {message}")
     origin_service = message.get('origin_service')
-    # Si el mensaje es de este mismo servicio, lo ignoramos.
     if origin_service == "payments":
         logger.info("Ignoring message from the same service")
         return
-    
+
     event = method.routing_key
-    #split the event to get the action
-    _,id,action= event.split('.')
+    _, id, action = event.split('.')
 
     if action == "created":
-        # Get the student_id and the data from the message
         student_id = message.get("student_id")
         data = message.get("data")
-        # Insert the data into the database
+        body = {
+            "amount": data["amount"],
+            "description": data["description"],
+            "payment_id": data["payment_id"]
+        }
         try:
-            response = requests.post(url+f"{student_id}/payments",data={"amount":data["amount"],"description":data["description"]})
-            response.raise_for_status()  # Levanta una excepción si hay error
+            response = requests.post(
+                url+f"{student_id}/payments", json=body)
+            response.raise_for_status()
             logger.info("Detalles del pago:", response.json())
         except requests.exceptions.RequestException as e:
-            logger.info("Error al realizar el request:", e)
-        # store_payment(student_id, data["amount"], data["description"])       
-               
+            logger.info("Error al realizar la request:", e)
+
         logger.info("[x] Payment created")
 
     elif action == "updated":
-        # Get the student_id and the data from the message
+
         student_id = message.get("student_id")
+        payment_id = message.get("payment_id")
         data = message.get("data")
-        # Insert the data into the database
-        update_payment(student_id, id, data["amount"], data["description"])
+        body = {
+            "amount": data["amount"],
+            "description": data["description"],
+            "status": data["status"]
+        }
+        try:
+            response = requests.put(
+                url+f"{student_id}/payments/{payment_id}", json=body)
+            response.raise_for_status()
+            logger.info("Detalles del pago actualizado:", response.json())
+        except requests.exceptions.RequestException as e:
+            logger.info("Error al realizar la request:", e)
         logger.info("[x] Payment updated")
 
     elif action == "deleted":
-        # Get the student_id and the data from the message
         student_id = message.get("student_id")
-        data = message.get("data")
-        # Insert the data into the database
-        delete_payment(student_id, id)
+        payment_id = message.get("payment_id")
+        try:
+            response = requests.delete(
+                url+f"{student_id}/payments/{payment_id}")
+            response.raise_for_status()
+            logger.info("Detalles del pago elimiado:", response.json())
+        except requests.exceptions.RequestException as e:
+            logger.info("Error al realizar la request:", e)
         logger.info("[x] Payment deleted")
 
     ch.basic_ack(delivery_tag=method.delivery_tag)
 
 
-Consumer("payments",callback)
-
+Consumer("payments", callback)

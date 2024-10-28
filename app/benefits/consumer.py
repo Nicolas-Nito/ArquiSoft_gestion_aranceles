@@ -16,54 +16,72 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Consumer_Benefit")
 url = f"http://benefits-container:8002/api/v1/"
 
+
 def callback(ch, method, properties, body):
-    
 
     message = json.loads(body)
     logger.info(f" [x] Received {message}")
-    origin_service = message.get('origin_service')
-    # Si el mensaje es de este mismo servicio, lo ignoramos.
-    if origin_service == "benefits":
-        logger.info("Ignoring message from the same service")
-        return
-    
+
     event = method.routing_key
-    #split the event to get the action
-    _,id,action= event.split('.')
+    _, id, action = event.split('.')
 
     if action == "created":
-        # Get the student_id and the data from the message
         student_id = message.get("student_id")
         data = message.get("data")
-        # Insert the data into the database
+        body = {
+            "amount": data["amount"],
+            "benefit_id": data["benefit_id"],
+            "description": data["description"],
+            "end_date": data["end_date"],
+            "name": data["name"],
+            "start_date": data["start_date"],
+            "status": data["status"]
+        }
         try:
-            response = requests.post(url+f"{student_id}/benefits",data={"amount":data["amount"],"description":data["description"]})
-            response.raise_for_status()  # Levanta una excepción si hay error
-            logger.info("Detalles del pago:", response.json())
+            response = requests.post(url+f"{student_id}/benefits", json=body)
+            response.raise_for_status()
+            logger.info("Detalles del beneficio:", response.json())
         except requests.exceptions.RequestException as e:
-            logger.info("Error al realizar el request:", e)
-        # store_benefit(student_id, data["amount"], data["description"])       
-               
+            logger.info("Error al realizar la request:", e)
+
         logger.info("[x] benefit created")
 
     elif action == "updated":
-        # Get the student_id and the data from the message
         student_id = message.get("student_id")
+        benefit_id = message.get("benefit_id")
         data = message.get("data")
-        # Insert the data into the database
-        update_benefit(student_id, id, data["amount"], data["description"])
+        body = {
+            "amount": data["amount"],
+            "description": data["description"],
+            "end_date": data["end_date"],
+            "name": data["name"],
+            "start_date": data["start_date"],
+            "status": data["status"]
+        }
+        try:
+            response = requests.put(
+                url+f"{student_id}/benefits/{benefit_id}", json=body)
+            response.raise_for_status()
+            logger.info("Detalles del beneficio actualizado:", response.json())
+        except requests.exceptions.RequestException as e:
+            logger.info("Error al realizar la request:", e)
+
         logger.info("[x] Benefit updated")
 
     elif action == "deleted":
-        # Get the student_id and the data from the message
         student_id = message.get("student_id")
-        data = message.get("data")
-        # Insert the data into the database
-        delete_benefit(student_id, id)
+        benefit_id = message.get("benefit_id")
+        try:
+            response = requests.delete(
+                url+f"{student_id}/benefits/{benefit_id}")
+            response.raise_for_status()
+            logger.info("Detalles del beneficio elimiando:", response.json())
+        except requests.exceptions.RequestException as e:
+            logger.info("Error al realizar la request:", e)
+
         logger.info("[x] Benefit deleted")
 
     ch.basic_ack(delivery_tag=method.delivery_tag)
 
 
-Consumer("benefits",callback)
-
+Consumer("benefits", callback)

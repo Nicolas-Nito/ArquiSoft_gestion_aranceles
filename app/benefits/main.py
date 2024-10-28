@@ -7,7 +7,7 @@ from bson import ObjectId
 from datetime import datetime
 from typing import List
 import os
-from ..routers.test import prefix, router
+from ..routers.router import prefix, router
 from ..rabbit.main import publish_event
 import pika
 from pika.exchange_type import ExchangeType
@@ -22,19 +22,17 @@ mongo_pass = os.getenv("MONGO_ADMIN_PASS")
 client = MongoClient("mongodb://mongodb:27017/",
                      username=mongo_user,
                      password=mongo_pass)
-db = client["tarea-unidad-04"]
+db = client["benefit"]
 benefits_collection = db["benefits"]
 
 app = FastAPI()
 app.include_router(router)
 
 
-
-#----------------------Schemas-------------------------------
+# ----------------------Schemas-------------------------------
 class Payment(BaseModel):
     payment_id: str
     amount: float
-    date: datetime
     description: Optional[str] = None
 
     model_config = {
@@ -42,7 +40,7 @@ class Payment(BaseModel):
             "example": {
                 "payment_id": "PAY123",
                 "amount": 1500.00,
-                "date": "2024-10-20T22:16:23.930Z"
+                "description": "Matricula 2024"
             }
         }
     }
@@ -50,15 +48,15 @@ class Payment(BaseModel):
 
 class UpdatePayment(BaseModel):
     amount: Optional[float] = None
-    date: Optional[datetime] = None
     status: Optional[str] = None
+    description: Optional[str] = None
 
     model_config = {
         "json_schema_extra": {
             "example": {
                 "amount": 2000.00,
-                "date": "2024-10-20T22:16:23.930Z",
-                "status": "actived"
+                "status": "actived",
+                "description": "Matricula 2025"
             }
         }
     }
@@ -112,7 +110,9 @@ class UpdateBenefit(BaseModel):
     }
 
 
-#----------------------End Points-------------------------------
+# ----------------------End Points-------------------------------
+
+
 # Endpoint: Registrar un beneficio (POST)
 @app.post(f"{prefix}/{{student_id}}/benefits", summary="Registrar un Beneficio",
           description="""
@@ -153,12 +153,6 @@ def register_benefit(student_id: str, benefit: Benefit):
         raise HTTPException(
             status_code=400, detail="No se pudo registrar el beneficio")
 
-    publish_event(f"benefits.{benefit.benefit_id}.created",
-                {
-                    "origin_service": "benefits",
-                    "student_id": student_id,
-                    "data": benefit.dict()
-                })
     return {"msg": "Beneficio registrado exitosamente!"}
 
 # Endpoint: Actualizar información de un beneficio (PUT)
@@ -273,12 +267,12 @@ def update_benefit(student_id: str, benefit_id: str, update_benefit: UpdateBenef
             detail="No se pudo obtener el beneficio actualizado"
         )
 
-    publish_event(f"benefits.{benefit_id}.updated", 
-                {
-                    "origin_service": "benefits",
-                    "student_id": student_id,
-                    "data": update_benefit.dict()
-                })
+    publish_event(f"benefits.{benefit_id}.updated",
+                  {
+        "origin_service": "benefits",
+        "student_id": student_id,
+        "data": update_benefit.dict()
+    })
 
     return updated_student["benefits"][0]
 
@@ -296,12 +290,12 @@ def delete_benefit(student_id: str, benefit_id: str):
         raise HTTPException(
             status_code=404, detail="Beneficio o estudiante no encontrado")
 
-    publish_event(f"benefits.{benefit_id}.deleted", 
-                {
-                    "origin_service": "benefits",
-                    "student_id": student_id,
-                    "benefit_id": benefit_id
-                })
+    publish_event(f"benefits.{benefit_id}.deleted",
+                  {
+        "origin_service": "benefits",
+        "student_id": student_id,
+        "benefit_id": benefit_id
+    })
     return {"msg": "Beneficio eliminado exitosamente"}
 
 # Endpoint: Consultar información de un beneficio (GET)
@@ -418,13 +412,13 @@ def registrar_pago(student_id: str, benefit_id: str, payment: Payment):
                     {"student_id": student_id, "benefits.benefit_id": benefit_id},
                     {"$push": {"benefits.$.payments": payment.dict()}}
                 )
-            payment.description= "Pago"
-            publish_event(f"payments.{payment.payment_id}.created",
-                        {
-                            "origin_service": "benefits",
-                            "student_id": student_id,
-                            "data": payment.dict()
-                        })
+            publish_event(f"payments.{payment.
+                                      payment_id}.created",
+                          {
+                "origin_service": "benefits",
+                "student_id": student_id,
+                "data": payment.dict()
+            })
             return {"msg": "Pago registrado exitosamente", "payment_id": payment.payment_id}
 
     raise HTTPException(status_code=404, detail="Beneficio no encontrado")
@@ -434,7 +428,7 @@ def registrar_pago(student_id: str, benefit_id: str, payment: Payment):
 
 @ app.put(f"{prefix}/{{student_id}}/benefits/{{benefit_id}}/payments/{{payment_id}}", summary="Actualizar información de un pago mediante un beneficio", description="""
   `amount`: Valor monetario del pago.\n
-  `date`: Fecha del pago.\n
+  `description`: Descripción del pago.\n
   `status`: estado del pago (Valores que puede tomar: "actived", "inactived" o "expired")
 """,  tags=["PUT"])
 def actualizar_pago(student_id: str, benefit_id: str, payment_id: str, update_payment: UpdatePayment):
@@ -557,14 +551,15 @@ def actualizar_pago(student_id: str, benefit_id: str, payment_id: str, update_pa
 
     # Extraer el payment actualizado
     payment = updated_student["benefits"][0]["payments"][0]
-    #payment.description = "Pago"
+    # payment.description = "Pago"
 
     publish_event(f"payments.{payment_id}.updated",
-                {
-                    "origin_service": "benefits",
-                    "student_id": student_id,
-                    "data": payment
-                })
+                  {
+        "origin_service": "benefits",
+        "student_id": student_id,
+        "payment_id": payment_id,
+        "data": payment
+    })
 
     return {
         "payment": payment
@@ -640,11 +635,11 @@ def eliminar_pago(student_id: str, benefit_id: str, payment_id: str):
         ]
     )
     publish_event(f"payments.{payment_id}.deleted",
-                {
-                    "origin_service": "benefits",
-                    "student_id": student_id,
-                    "payment_id": payment_id
-                })
+                  {
+        "origin_service": "benefits",
+        "student_id": student_id,
+        "payment_id": payment_id
+    })
     return {"msg": "Pago eliminado exitosamente"}
 
 # Endpoint: Consultar información de un pago mediante un beneficio (GET)
@@ -716,4 +711,3 @@ def listar_pagos(student_id: str, benefit_id: str, skip: int = None, limit: int 
             return payments
 
     raise HTTPException(status_code=404, detail="Beneficio no encontrado")
-
