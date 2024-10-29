@@ -42,7 +42,10 @@ class PaymentStatus(str, Enum):
 
 class Payment(BaseModel):
     payment_id: str
+    debt_id: str
     amount: float
+    month: str
+    year: int
     description: Optional[str] = None
 
     model_config = {
@@ -50,7 +53,10 @@ class Payment(BaseModel):
             "example": {
                 "payment_id": "PAY123",
                 "amount": 1500.00,
-                "description": "Matricula 2024"
+                "debt_id": "DEBT123",
+                "month": "marzo",
+                "year": "2024",
+                "description": "Pago de matricula del estudiante",
             }
         }
     }
@@ -64,6 +70,8 @@ class Student(BaseModel):
 class UpdatePayment(BaseModel):
     amount: Optional[float] = None
     status: Optional[str] = None
+    month: Optional[str] = None
+    year: Optional[int] = None
     description: Optional[str] = None
 
     model_config = {
@@ -71,7 +79,9 @@ class UpdatePayment(BaseModel):
             "example": {
                 "amount": 2000.00,
                 "status": "actived",
-                "description": "Matricula 2025"
+                "month": "marzo",
+                "year": 2025,
+                "description": "Pago de matricula del estudiante",
             }
         }
     }
@@ -79,9 +89,12 @@ class UpdatePayment(BaseModel):
 
 class PaymentResponse(BaseModel):
     payment_id: str
+    debt_id: str
     amount: float
-    status: str
+    month: str
+    year: int
     description: Optional[str] = None
+    status: str
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -94,10 +107,11 @@ class PaginatedPaymentsResponse(BaseModel):
 
 # ----------------------End Points-------------------------------
 
+# Registrar un pago:
+
 
 @app.post(
     f"{prefix}/{{student_id}}/payments",
-    response_model=Student,
     status_code=status.HTTP_201_CREATED,
     summary="Registrar un pago para un estudiante",
     description="""
@@ -106,6 +120,23 @@ class PaginatedPaymentsResponse(BaseModel):
 )
 async def store_payment(student_id: str, payment: Payment):
     try:
+        existing_payment_check = payments_collection.find_one({
+            "student_id": student_id,
+            "payments": {
+                "$elemMatch": {
+                    "debt_id": payment.debt_id,
+                    "month": payment.month,
+                    "year": payment.year
+                }
+            }
+        })
+
+        if existing_payment_check:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Ya existe un pago registrado para la deuda {
+                    payment.debt_id} en {payment.month}/{payment.year}"
+            )
         existing_payment = payments_collection.find_one(
             {"payments": {"$elemMatch": {"payment_id": payment.payment_id}}}
         )
@@ -143,7 +174,7 @@ async def store_payment(student_id: str, payment: Payment):
             )
 
         student.pop('_id', None)
-        return student
+        return {"msg": "Pago registrado correctamente!", "student_payments": student}
 
     except HTTPException:
         raise
@@ -158,10 +189,11 @@ async def store_payment(student_id: str, payment: Payment):
             detail=f"Se produjo un error inesperado: {str(e)}"
         )
 
+# Actualizar información de un pago:
+
 
 @app.put(
     f"{prefix}/{{student_id}}/payments/{{payment_id}}",
-    response_model=Student,
     status_code=status.HTTP_200_OK,
     summary="Actualizar información de un pago de un estudiante",
     description="""
@@ -198,8 +230,8 @@ async def update_payment(student_id: str, payment_id: str, update_payment: Updat
                 )
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Payment with ID {
-                    payment_id} not found for student {student_id}"
+                detail=f"Pago con ID {
+                    payment_id} no encontrado para estudiante {student_id}"
             )
 
         if result.modified_count == 0:
@@ -214,7 +246,7 @@ async def update_payment(student_id: str, payment_id: str, update_payment: Updat
             )
 
         updated_student.pop('_id', None)
-        return updated_student
+        return {"msg": "Pago actualizado correctamente!", "student_updated": updated_student}
 
     except HTTPException:
         raise
@@ -229,6 +261,8 @@ async def update_payment(student_id: str, payment_id: str, update_payment: Updat
             detail=f"Se produjo un error inesperado: {str(e)}"
         )
 
+# Eliminar un pago:
+
 
 @app.delete(
     f"{prefix}/{{student_id}}/payments/{{payment_id}}",
@@ -241,27 +275,28 @@ async def update_payment(student_id: str, payment_id: str, update_payment: Updat
 )
 async def delete_payment(student_id: str, payment_id: str):
     try:
-        payment = payments_collection.aggregate([
-            {"$match": {"student_id": student_id}},
-            {"$unwind": "$payments"},
-            {"$match": {"payments.payment_id": payment_id}},
-            {"$project": {
-                "_id": 0,
-                "status": "$payments.status"
-            }}
-        ]).next()
+        try:
+            payment = payments_collection.aggregate([
+                {"$match": {"student_id": student_id}},
+                {"$unwind": "$payments"},
+                {"$match": {"payments.payment_id": payment_id}},
+                {"$project": {
+                    "_id": 0,
+                    "status": "$payments.status"
+                }}
+            ]).next()
 
-        if not payment:
+        except StopIteration:
             student = payments_collection.find_one({"student_id": student_id})
             if not student:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Estdiante con ID {student_id} no fue encontrado"
+                    detail=f"Estudiante con ID {student_id} no fue encontrado"
                 )
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Payment with ID {
-                    payment_id} not found for student {student_id}"
+                detail=f"Pago con ID {
+                    payment_id} no encontrado para estudiante {student_id}"
             )
 
         if payment.get('status') == 'inactived':
@@ -278,7 +313,7 @@ async def delete_payment(student_id: str, payment_id: str):
             {
                 "$set": {
                     "payments.$.status": "inactived",
-                    "payments.$.updated_at": datetime.utcnow()
+                    "payments.$.updated_at": datetime.now()
                 }
             }
         )
@@ -296,7 +331,10 @@ async def delete_payment(student_id: str, payment_id: str):
             {"$project": {
                 "_id": 0,
                 "payment_id": "$payments.payment_id",
+                "debt_id": "$payments.debt_id",
                 "amount": "$payments.amount",
+                "month": "$payments.month",
+                "year": "$payments.year",
                 "status": "$payments.status",
                 "description": "$payments.description",
                 "created_at": "$payments.created_at",
@@ -323,6 +361,70 @@ async def delete_payment(student_id: str, payment_id: str):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Se produjo un error inesperado: {str(e)}"
         )
+
+# Consultar información de un pago:
+
+
+@app.get(
+    f"{prefix}/{{student_id}}/payments/{{payment_id}}",
+    response_model=PaymentResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Obtener información de un pago específico",
+    description="""
+    (FALTA DESCRIPCIÓN)
+    """, tags=["GET"]
+)
+async def get_payment(student_id: str, payment_id: str):
+    try:
+        payment_cursor = payments_collection.aggregate([
+            {"$match": {"student_id": student_id}},
+            {"$unwind": "$payments"},
+            {"$match": {"payments.payment_id": payment_id}},
+            {"$project": {
+                "_id": 0,
+                "payment_id": "$payments.payment_id",
+                "debt_id": "$payments.debt_id",
+                "amount": "$payments.amount",
+                "month": "$payments.month",
+                "year": "$payments.year",
+                "status": "$payments.status",
+                "description": "$payments.description",
+                "created_at": "$payments.created_at",
+                "updated_at": "$payments.updated_at"
+            }}
+        ])
+
+        try:
+            payment = payment_cursor.next()
+        except StopIteration:
+            student = payments_collection.find_one({"student_id": student_id})
+            if not student:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Estudiante con ID {student_id} no fue encontrado"
+                )
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Pago con ID {
+                    payment_id} no encontrado para estudiante{student_id}"
+            )
+
+        return payment
+
+    except HTTPException:
+        raise
+    except pymongo.errors.PyMongoError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Se produjo un error en la base de datos: {str(e)}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Se produjo un error inesperado: {str(e)}"
+        )
+
+# Listar todos los pagos de un estudiante:
 
 
 @app.get(
@@ -441,64 +543,119 @@ async def get_payments(
             detail=f"A ocurrido un error inesperado: {str(e)}"
         )
 
+# Listar todos los pagos de un arancel:
+
 
 @app.get(
-    f"{prefix}/{{student_id}}/payments/{{payment_id}}",
-    response_model=PaymentResponse,
+    f"{prefix}/{{student_id}}/debts/{{debts_id}}/payments",
+    response_model=PaginatedPaymentsResponse,
     status_code=status.HTTP_200_OK,
-    summary="Obtener información de pago específica",
+    summary="Obtener todos los pagos asociados a una deuda específica de un estudiante",
     description="""
-    (FALTA DESCRIPCIÓN)
-    """, tags=["GET"]
+    Este endpoint permite obtener todos los pagos realizados para una deuda específica de un estudiante.
+    Incluye paginación y la posibilidad de filtrar por estado y rango de fechas.
+    """,
+    tags=["GET"]
 )
-async def get_payment(student_id: str, payment_id: str):
+async def get_debt_payments(
+    student_id: str,
+    debts_id: str,
+    page: int = Query(default=1, ge=1, description="Número de página"),
+    page_size: int = Query(default=10, ge=1, le=100,
+                           description="Elementos por página"),
+    status: Optional[PaymentStatus] = Query(
+        default=None, description="Filtrar por estado del pago"),
+    from_date: Optional[datetime] = Query(
+        default=None, description="Filtrar pagos desde esta fecha"),
+    to_date: Optional[datetime] = Query(
+        default=None, description="Filtrar pagos hasta esta fecha"),
+    sort_order: Optional[str] = Query(
+        default="desc",
+        enum=["asc", "desc"],
+        description="Orden de clasificación"
+    )
+):
     try:
-        payment_cursor = payments_collection.aggregate([
-            {"$match": {"student_id": student_id}},
-            {"$unwind": "$payments"},
-            {"$match": {"payments.payment_id": payment_id}},
-            {"$project": {
-                "_id": 0,
-                "payment_id": "$payments.payment_id",
-                "amount": "$payments.amount",
-                "status": "$payments.status",
-                "description": "$payments.description",
-                "created_at": "$payments.created_at",
-                "updated_at": "$payments.updated_at"
-            }}
-        ])
-
-        try:
-            payment = payment_cursor.next()
-        except StopIteration:
-            student = payments_collection.find_one({"student_id": student_id})
-            if not student:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Student with ID {student_id} not found"
-                )
+        student = payments_collection.find_one({"student_id": student_id})
+        if not student:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Payment with ID {
-                    payment_id} not found for student {student_id}"
+                detail=f"Estudiante con ID {student_id} no fue encontrado"
             )
 
-        return payment
+        pipeline = [
+            {"$match": {"student_id": student_id}},
+            {"$unwind": "$payments"},
+            {"$match": {"payments.debt_id": debts_id}}
+        ]
+
+        filter_conditions = {}
+
+        if status:
+            filter_conditions["payments.status"] = status.value
+
+        if from_date:
+            filter_conditions["payments.created_at"] = {"$gte": from_date}
+        if to_date:
+            filter_conditions["payments.created_at"] = {
+                **filter_conditions.get("payments.created_at", {}),
+                "$lte": to_date
+            }
+
+        if filter_conditions:
+            pipeline.append({"$match": filter_conditions})
+
+        count_pipeline = pipeline.copy()
+        count_pipeline.append({"$count": "total"})
+        total_count = list(payments_collection.aggregate(count_pipeline))
+        total = total_count[0]["total"] if total_count else 0
+
+        if total == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No se encontraron pagos para la deuda {
+                    debts_id} del estudiante {student_id}"
+            )
+
+        sort_direction = pymongo.DESCENDING if sort_order == "desc" else pymongo.ASCENDING
+        pipeline.extend([
+            {"$sort": {"payments.created_at": sort_direction}},
+            {"$skip": (page - 1) * page_size},
+            {"$limit": page_size},
+            {
+                "$project": {
+                    "_id": 0,
+                    "payment_id": "$payments.payment_id",
+                    "debt_id": "$payments.debt_id",
+                    "amount": "$payments.amount",
+                    "month": "$payments.month",
+                    "year": "$payments.year",
+                    "status": "$payments.status",
+                    "description": "$payments.description",
+                    "created_at": "$payments.created_at",
+                    "updated_at": "$payments.updated_at"
+                }
+            }
+        ])
+
+        payments = list(payments_collection.aggregate(pipeline))
+
+        return PaginatedPaymentsResponse(
+            total=total,
+            page=page,
+            page_size=page_size,
+            payments=payments
+        )
 
     except HTTPException:
         raise
     except pymongo.errors.PyMongoError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Database error occurred: {str(e)}"
+            detail=f"Se produjo un error en la base de datos: {str(e)}"
         )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred: {str(e)}"
+            detail=f"Se produjo un error inesperado: {str(e)}"
         )
-
-
-@app.get(f"{prefix}/{{student_id}}/debts/{{debts_id}}/payments", tags=["GET"])
-def get_debt_payments(student_id: str, payment_id: str):
-    return {"msg": "Endpoint no implementado"}

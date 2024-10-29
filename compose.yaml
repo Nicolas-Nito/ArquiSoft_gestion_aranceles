@@ -16,7 +16,7 @@ services:
     environment:
       - MONGO_ADMIN_USER=${MONGO_ADMIN_USER}
       - MONGO_ADMIN_PASS=${MONGO_ADMIN_PASS}
-      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/  # URL de RabbitMQ para conectarse
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/
     env_file:
       - .env
 
@@ -37,7 +37,7 @@ services:
     environment:
       - MONGO_ADMIN_USER=${MONGO_ADMIN_USER}
       - MONGO_ADMIN_PASS=${MONGO_ADMIN_PASS}
-      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/  # URL de RabbitMQ para conectarse
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/
     env_file:
       - .env
 
@@ -59,7 +59,7 @@ services:
     environment:
       - MONGO_ADMIN_USER=${MONGO_ADMIN_USER}
       - MONGO_ADMIN_PASS=${MONGO_ADMIN_PASS}
-      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/  # URL de RabbitMQ para conectarse
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/
     env_file:
       - .env
 
@@ -80,7 +80,7 @@ services:
     environment:
       - MONGO_ADMIN_USER=${MONGO_ADMIN_USER}
       - MONGO_ADMIN_PASS=${MONGO_ADMIN_PASS}
-      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/  # URL de RabbitMQ para conectarse
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/
     env_file:
       - .env
 
@@ -102,10 +102,10 @@ services:
     environment:
       - MONGO_ADMIN_USER=${MONGO_ADMIN_USER}
       - MONGO_ADMIN_PASS=${MONGO_ADMIN_PASS}
-      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/  # URL de RabbitMQ para conectarse
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/
     env_file:
       - .env
-  
+
   benefits-container:
     build:
       context: ./
@@ -123,7 +123,7 @@ services:
     environment:
       - MONGO_ADMIN_USER=${MONGO_ADMIN_USER}
       - MONGO_ADMIN_PASS=${MONGO_ADMIN_PASS}
-      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/  # URL de RabbitMQ para conectarse
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/
     env_file:
       - .env
 
@@ -145,7 +145,7 @@ services:
     environment:
       - MONGO_ADMIN_USER=${MONGO_ADMIN_USER}
       - MONGO_ADMIN_PASS=${MONGO_ADMIN_PASS}
-      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/  # URL de RabbitMQ para conectarse
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/
     env_file:
       - .env
 
@@ -160,19 +160,17 @@ services:
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ADMIN_USER}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ADMIN_PASS}
-  
 
   rabbitmq:
     image: rabbitmq:3-management
     ports:
-      - "5672:5672"  # Puerto para las conexiones AMQP
-      - "15672:15672"  # Puerto para la interfaz de administración web
+      - "5672:5672"
+      - "15672:15672"
     networks:
       - tarea-unidad-04
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
-
 
 volumes:
   mongodb-data:

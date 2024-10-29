@@ -14,7 +14,7 @@ RETRY_DELAY = 5
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Consumer_Benefit")
-url = f"http://benefits-container:8002/api/v1/"
+url = f"http://benefits-container:8001/api/v1/"
 
 
 def callback(ch, method, properties, body):

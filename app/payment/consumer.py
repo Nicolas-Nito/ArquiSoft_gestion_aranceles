@@ -28,7 +28,6 @@ def callback(ch, method, properties, body):
 
     event = method.routing_key
     _, id, action = event.split('.')
-
     if action == "created":
         student_id = message.get("student_id")
         data = message.get("data")
