@@ -46,15 +46,23 @@ class DebtStatus(str, Enum):
 
 class Debt(BaseModel):
     debt_id: str
+    type: str
     amount: float
+    month: str
+    semester: str
+    year: int
     description: Optional[str] = None
 
     model_config = {
         "json_schema_extra": {
             "example": {
                 "debt_id": "DEBT123",
+                "type": "arancel",
                 "amount": 1500.00,
-                "description": "Matricula 2024"
+                "month": "marzo",
+                "semester": "2024-1",
+                "year": 2024,
+                "description": "Descripción del arancel",
             }
         }
     }
@@ -66,7 +74,11 @@ class Student(BaseModel):
 
 
 class UpdateDebt(BaseModel):
+    type: Optional[str] = None
     amount: Optional[float] = None
+    month: Optional[str] = None
+    semester: Optional[str] = None
+    year: Optional[int] = None
     status: Optional[str] = None
     description: Optional[str] = None
     paid: Optional[bool] = None
@@ -74,7 +86,11 @@ class UpdateDebt(BaseModel):
     model_config = {
         "json_schema_extra": {
             "example": {
+                "type": "arancel",
                 "amount": 2000.00,
+                "month": "marzo",
+                "semester": "2024-1",
+                "year": 2024,
                 "status": "actived",
                 "description": "Matricula 2025",
                 "paid": False
@@ -85,10 +101,13 @@ class UpdateDebt(BaseModel):
 
 class DebtResponse(BaseModel):
     debt_id: str
+    type: str
     amount: float
-    status: str
-    paid: bool
+    month: str
+    semester: str
+    year: int
     description: Optional[str] = None
+    paid: bool
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -99,6 +118,37 @@ class PaginatedDebtsResponse(BaseModel):
     page_size: int
     debts: List[DebtResponse]
 
+
+class Enrollment(BaseModel):
+    enrollment_id: str
+    semester: str
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "enrollment_id": "ENR123",
+                "semester": "2024-1",
+            }
+        }
+    }
+
+
+class UpdateEnrollment(BaseModel):
+    semester: Optional[str] = None
+    paid: Optional[bool] = None
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "semester": "2024-1",
+                "paid": False
+            }
+        }
+    }
+
+
+class StudentEnrollment(BaseModel):
+    student_id: str
+    enrollmets: List[Enrollment] = []
 # ----------------------End Points-------------------------------
 
 # Registrar aranceles:
@@ -177,11 +227,19 @@ def store_debt(student_id: str, debt: Debt):
     """, tags=["PUT"]
 )
 async def update_debt(student_id: str, debt_id: str, update_debt: UpdateDebt):
+    print("ENTRAAAAA")
     try:
         update_data = {
             k: v for k, v in update_debt.model_dump().items()
             if v is not None
         }
+
+        if len(update_data) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No se proporcionaron datos para actualizar"
+            )
+
         update_data['updated_at'] = datetime.now()
 
         result = debts_collection.update_one(
@@ -356,9 +414,13 @@ async def get_debt(student_id: str, debt_id: str):
             {"$project": {
                 "_id": 0,
                 "debt_id": "$debts.debt_id",
+                "type": "$debts.type",
                 "amount": "$debts.amount",
+                "month": "$debts.month",
+                "semester": "$debts.semester",
+                "year": "$debts.year",
                 "status": "$debts.status",
-                "apid": "$debts.paid",
+                "paid": "$debts.paid",
                 "description": "$debts.description",
                 "created_at": "$debts.created_at",
                 "updated_at": "$debts.updated_at"
@@ -521,58 +583,384 @@ async def get_debts(
 # Registrar matricula:
 
 
-@app.post(f"{prefix}/{{student_id}}/enrollments")
-def enroll_student(student_id: str, semester: str = Form(...)):
-    enrollment_data = {
-        "semester": semester,
-        "student_id": int(student_id)
-    }
+@app.post(
+    f"{prefix}/{{student_id}}/enrollments",
+    status_code=status.HTTP_201_CREATED,
+    summary="Registrar una matrícula para un estudiante",
+    description="Registra una nueva matrícula para un estudiante específico", tags=["POST"]
+)
+def enroll_student(student_id: str, enrollment: Enrollment):
+    try:
+        existing_enrollment = debts_collection.find_one(
+            {"enrollments": {"$elemMatch": {"enrollment_id": enrollment.enrollment_id}}}
+        )
 
-    result = db["enrollments"].insert_one(enrollment_data)
-    return {"succesfull inster in id": str(result.inserted_id)}
+        if existing_enrollment:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"La matrícula con ID {
+                    enrollment.enrollment_id} ya existe"
+            )
+
+        enrollment_dict = enrollment.model_dump()
+        enrollment_dict.update({
+            "status": "active",
+            "created_at": datetime.now(),
+            "paid": False
+        })
+
+        result = debts_collection.update_one(
+            {"student_id": student_id},
+            {"$push": {"enrollments": enrollment_dict}}
+        )
+
+        if result.matched_count == 0:
+            new_student = {
+                "student_id": student_id,
+                "enrollments": [enrollment_dict]
+            }
+            debts_collection.insert_one(new_student)
+
+        student = debts_collection.find_one({"student_id": student_id})
+        if not student:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No se pudo recuperar el estudiante con ID: {
+                    student_id}"
+            )
+
+        student.pop('_id', None)
+        return {"msg": "Matrícula registrada correctamente!", "student_enrollments": student}
+
+    except HTTPException:
+        raise
+    except pymongo.errors.PyMongoError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Se produjo un error en la base de datos: {str(e)}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Se produjo un error inesperado: {str(e)}"
+        )
 
 # Actualizar información de una matricula:
 
 
-@app.put(f"{prefix}/{{student_id}}/enrollments/{{enrollment_id}}")
-def update_enrollment(student_id: str, enrollment_id: str, semester: str = Form(...)):
-    enrollment_data = {
-        "semester": semester,
-        "student_id": int(student_id)
-    }
-    db["enrollments"].update_one({"_id": ObjectId(enrollment_id)}, {
-                                 "$set": enrollment_data})
-    return {"Hello": student_id, "Enrollment": enrollment_id}
+@app.put(
+    f"{prefix}/{{student_id}}/enrollments/{{enrollment_id}}",
+    status_code=status.HTTP_200_OK,
+    summary="Actualizar información de una matrícula",
+    description="Actualiza la información de una matrícula existente", tags=["PUT"]
+)
+def update_enrollment(student_id: str, enrollment_id: str, enrollment: UpdateEnrollment):
+    try:
+        update_data = enrollment.model_dump(exclude_unset=True)
+        if len(update_data) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No se proporcionaron datos para actualizar"
+            )
+
+        update_data['updated_at'] = datetime.now()
+
+        result = debts_collection.update_one(
+            {
+                "student_id": student_id,
+                "enrollments.enrollment_id": enrollment_id
+            },
+            {
+                "$set": {
+                    f"enrollments.$.{key}": value
+                    for key, value in update_data.items()
+                }
+            }
+        )
+
+        if result.matched_count == 0:
+            student = debts_collection.find_one({"student_id": student_id})
+            if not student:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Estudiante con ID {student_id} no fue encontrado"
+                )
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Matrícula con ID {
+                    enrollment_id} no encontrada para estudiante {student_id}"
+            )
+
+        updated_student = debts_collection.find_one({"student_id": student_id})
+        if not updated_student:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No se pudo recuperar el registro actualizado del estudiante"
+            )
+
+        updated_student.pop('_id', None)
+        return {"msg": "Matrícula actualizada correctamente!", "student_updated": updated_student}
+
+    except HTTPException:
+        raise
+    except pymongo.errors.PyMongoError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Se produjo un error en la base de datos: {str(e)}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Se produjo un error inesperado: {str(e)}"
+        )
 
 # Eliminar una matricula:
 
 
-@app.delete(f"{prefix}/{{student_id}}/enrollments/{{enrollment_id}}")
+@app.delete(
+    f"{prefix}/{{student_id}}/enrollments/{{enrollment_id}}",
+    status_code=status.HTTP_200_OK,
+    summary="Eliminar matrícula de un estudiante",
+    description="Marca como inactiva una matrícula existente", tags=["DELETE"]
+)
 def delete_enrollment(student_id: str, enrollment_id: str):
-    enrollment_data = db["enrollments"].find_one(
-        {"_id": ObjectId(enrollment_id)})
-    enrollment_data["_id"] = str(enrollment_data["_id"])
-    db["deleted_enrollments"].insert_one(enrollment_data)
-    db["enrollments"].delete_one({"_id": ObjectId(enrollment_id)})
+    try:
+        try:
+            enrollment = debts_collection.aggregate([
+                {"$match": {"student_id": student_id}},
+                {"$unwind": "$enrollments"},
+                {"$match": {"enrollments.enrollment_id": enrollment_id}},
+                {"$project": {
+                    "_id": 0,
+                    "status": "$enrollments.status"
+                }}
+            ]).next()
 
-    return {"Hello": student_id, "Enrollment": enrollment_id}
+        except StopIteration:
+            student = debts_collection.find_one({"student_id": student_id})
+            if not student:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Estudiante con ID {student_id} no fue encontrado"
+                )
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Matrícula con ID {
+                    enrollment_id} no encontrada para estudiante {student_id}"
+            )
+
+        if enrollment.get('status') == 'inactived':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Matrícula con ID {enrollment_id} ya fue eliminada"
+            )
+
+        update_result = debts_collection.update_one(
+            {
+                "student_id": student_id,
+                "enrollments.enrollment_id": enrollment_id
+            },
+            {
+                "$set": {
+                    "enrollments.$.status": "inactived",
+                    "enrollments.$.updated_at": datetime.now()
+                }
+            }
+        )
+
+        if update_result.modified_count == 0:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Error al eliminar la matrícula"
+            )
+
+        updated_enrollment = debts_collection.aggregate([
+            {"$match": {"student_id": student_id}},
+            {"$unwind": "$enrollments"},
+            {"$match": {"enrollments.enrollment_id": enrollment_id}},
+            {"$project": {
+                "_id": 0,
+                "enrollment_id": "$enrollments.enrollment_id",
+                "semester": "$enrollments.semester",
+                "status": "$enrollments.status",
+                "paid": "$enrollments.paid",
+                "created_at": "$enrollments.created_at",
+                "updated_at": "$enrollments.updated_at"
+            }}
+        ]).next()
+
+        return updated_enrollment
+
+    except HTTPException:
+        raise
+    except pymongo.errors.PyMongoError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Se produjo un error en la base de datos: {str(e)}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Se produjo un error inesperado: {str(e)}"
+        )
 
 # Consultar información de una matricula:
 
 
-@app.get(f"{prefix}/{{student_id}}/enrollments/{{enrollment_id}}")
+@app.get(
+    f"{prefix}/{{student_id}}/enrollments/{{enrollment_id}}",
+    status_code=status.HTTP_200_OK,
+    summary="Consultar información de una matrícula",
+    description="Obtiene la información detallada de una matrícula específica", tags=["GET"]
+)
 def get_enrollment(student_id: str, enrollment_id: str):
-    enrollment = db["enrollments"].find_one({"_id": ObjectId(enrollment_id)})
-    enrollment["_id"] = str(enrollment["_id"])
-    return enrollment
+    try:
+        enrollment_cursor = debts_collection.aggregate([
+            {"$match": {"student_id": student_id}},
+            {"$unwind": "$enrollments"},
+            {"$match": {"enrollments.enrollment_id": enrollment_id}},
+            {"$project": {
+                "_id": 0,
+                "enrollment_id": "$enrollments.enrollment_id",
+                "semester": "$enrollments.semester",
+                "status": "$enrollments.status",
+                "paid": "$enrollments.paid",
+                "created_at": "$enrollments.created_at",
+                "updated_at": "$enrollments.updated_at"
+            }}
+        ])
+
+        try:
+            enrollment = enrollment_cursor.next()
+        except StopIteration:
+            student = debts_collection.find_one({"student_id": student_id})
+            if not student:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Estudiante con ID {student_id} no fue encontrado"
+                )
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Matrícula con ID {
+                    enrollment_id} no encontrada para estudiante {student_id}"
+            )
+
+        return enrollment
+
+    except HTTPException:
+        raise
+    except pymongo.errors.PyMongoError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Se produjo un error en la base de datos: {str(e)}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Se produjo un error inesperado: {str(e)}"
+        )
 
 # Listar todas las matriculas de un estudiante:
 
 
-@app.get(f"{prefix}/{{student_id}}/enrollments")
-def get_enrollments(student_id: str):
-    enrollments = db["enrollments"].find({"student_id": int(student_id)})
-    enrollments = list(enrollments)
-    for enrollment in enrollments:
-        enrollment["_id"] = str(enrollment["_id"])
-    return enrollments
+@app.get(
+    f"{prefix}/{{student_id}}/enrollments",
+    status_code=status.HTTP_200_OK,
+    summary="Listar matrículas de un estudiante",
+    description="Obtiene todas las matrículas de un estudiante con opciones de filtrado y paginación", tags=["GET"]
+)
+def get_enrollments(
+    student_id: str,
+    page: int = Query(default=1, ge=1, description="Número de página"),
+    page_size: int = Query(default=10, ge=1, le=100,
+                           description="Elementos por página"),
+    status: Optional[str] = Query(
+        default=None, description="Filtrar por estado de matrícula"),
+    paid: Optional[bool] = Query(
+        default=None, description="Filtrar por estado de pago"),
+    semester: Optional[str] = Query(
+        default=None, description="Filtrar por semestre"),
+    sort_by: Optional[str] = Query(
+        default="created_at",
+        enum=["created_at", "enrollment_id", "semester"],
+        description="Campo para ordenar"
+    ),
+    sort_order: Optional[str] = Query(
+        default="desc",
+        enum=["asc", "desc"],
+        description="Orden de clasificación"
+    )
+):
+    try:
+        student = debts_collection.find_one({"student_id": student_id})
+        if not student:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Estudiante con ID {student_id} no fue encontrado"
+            )
+
+        match_conditions = {"student_id": student_id}
+        filter_conditions = {}
+
+        if status:
+            filter_conditions["enrollments.status"] = status
+        if paid is not None:
+            filter_conditions["enrollments.paid"] = paid
+        if semester:
+            filter_conditions["enrollments.semester"] = semester
+
+        pipeline = [
+            {"$match": match_conditions},
+            {"$unwind": "$enrollments"}
+        ]
+
+        if filter_conditions:
+            pipeline.append({"$match": filter_conditions})
+
+        sort_direction = pymongo.DESCENDING if sort_order == "desc" else pymongo.ASCENDING
+        pipeline.append({"$sort": {f"enrollments.{sort_by}": sort_direction}})
+
+        # Count total enrollments
+        count_pipeline = pipeline.copy()
+        count_pipeline.append({"$count": "total"})
+        total_count = list(debts_collection.aggregate(count_pipeline))
+        total = total_count[0]["total"] if total_count else 0
+
+        # Add pagination
+        pipeline.extend([
+            {"$skip": (page - 1) * page_size},
+            {"$limit": page_size},
+            {
+                "$project": {
+                    "_id": 0,
+                    "enrollment_id": "$enrollments.enrollment_id",
+                    "semester": "$enrollments.semester",
+                    "status": "$enrollments.status",
+                    "paid": "$enrollments.paid",
+                    "created_at": "$enrollments.created_at",
+                    "updated_at": "$enrollments.updated_at"
+                }
+            }
+        ])
+
+        enrollments = list(debts_collection.aggregate(pipeline))
+
+        return {
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "enrollments": enrollments
+        }
+
+    except HTTPException:
+        raise
+    except pymongo.errors.PyMongoError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Se produjo un error en la base de datos: {str(e)}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Se produjo un error inesperado: {str(e)}"
+        )

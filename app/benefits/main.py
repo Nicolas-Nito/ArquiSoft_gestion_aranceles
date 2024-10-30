@@ -32,31 +32,48 @@ app.include_router(router)
 # ----------------------Schemas-------------------------------
 class Payment(BaseModel):
     payment_id: str
+    debt_id: str
+    type: str
     amount: float
+    month: str
+    semester: str
+    year: int
     description: Optional[str] = None
 
     model_config = {
         "json_schema_extra": {
             "example": {
                 "payment_id": "PAY123",
+                "debt_id": "DEBT123",
+                "type": "arancel",
                 "amount": 1500.00,
-                "description": "Matricula 2024"
+                "month": "marzo",
+                "semester": "2024-1",
+                "year": "2024",
+                "description": "Descripción del pago",
             }
         }
     }
 
 
 class UpdatePayment(BaseModel):
+    type: Optional[str] = None
     amount: Optional[float] = None
-    status: Optional[str] = None
+    month: Optional[str] = None
+    semester: Optional[str] = None
+    year: Optional[int] = None
     description: Optional[str] = None
-
+    status: Optional[str] = None
     model_config = {
         "json_schema_extra": {
             "example": {
+                "type": "matricula",
                 "amount": 2000.00,
+                "month": "marzo",
+                "semester": "2024-1",
+                "year": 2025,
+                "description": "Pago de matricula del estudiante",
                 "status": "actived",
-                "description": "Matricula 2025"
             }
         }
     }
@@ -74,9 +91,9 @@ class Benefit(BaseModel):
         "json_schema_extra": {
             "examples": [
                 {
-                    "benefit_id": "BEN456",
-                    "name": "CAE",
-                    "description": "Descripción del CAE",
+                    "benefit_id": "BEN123",
+                    "name": "Nombre del beneficio",
+                    "description": "Descripción del beneficio",
                     "amount": 500.00,
                     "start_date": "2024-10-20T22:16:23.930Z",
                     "end_date": "2024-10-20T22:16:23.930Z"
@@ -359,14 +376,6 @@ def list_benefits(student_id: str, skip: Optional[int] = None, limit: Optional[i
 
 @ app.post(f"{prefix}/{{student_id}}/benefits/{{benefit_id}}/payments", summary="Registrar un pago mediante un beneficio", tags=["POST"])
 def registrar_pago(student_id: str, benefit_id: str, payment: Payment):
-    """
-    Registra un nuevo pago asociado a un beneficio específico de un estudiante.
-
-    Parámetros:
-    - student_id: Identificador único del estudiante
-    - benefit_id: Identificador único del beneficio
-    - payment: Objeto con la información del pago a registrar
-    """
     student = benefits_collection.find_one({"student_id": student_id})
 
     if not student:

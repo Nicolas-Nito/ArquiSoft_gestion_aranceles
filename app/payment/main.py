@@ -43,8 +43,10 @@ class PaymentStatus(str, Enum):
 class Payment(BaseModel):
     payment_id: str
     debt_id: str
+    type: str
     amount: float
     month: str
+    semester: str
     year: int
     description: Optional[str] = None
 
@@ -52,9 +54,11 @@ class Payment(BaseModel):
         "json_schema_extra": {
             "example": {
                 "payment_id": "PAY123",
-                "amount": 1500.00,
                 "debt_id": "DEBT123",
+                "type": "matricula",
+                "amount": 1500.00,
                 "month": "marzo",
+                "semester": "2024-1",
                 "year": "2024",
                 "description": "Pago de matricula del estudiante",
             }
@@ -68,20 +72,23 @@ class Student(BaseModel):
 
 
 class UpdatePayment(BaseModel):
+    type: Optional[str] = None
     amount: Optional[float] = None
-    status: Optional[str] = None
     month: Optional[str] = None
+    semester: Optional[str] = None
     year: Optional[int] = None
     description: Optional[str] = None
-
+    status: Optional[str] = None
     model_config = {
         "json_schema_extra": {
             "example": {
+                "type": "matricula",
                 "amount": 2000.00,
-                "status": "actived",
                 "month": "marzo",
+                "semester": "2024-1",
                 "year": 2025,
                 "description": "Pago de matricula del estudiante",
+                "status": "actived",
             }
         }
     }
@@ -90,8 +97,10 @@ class UpdatePayment(BaseModel):
 class PaymentResponse(BaseModel):
     payment_id: str
     debt_id: str
+    type: str
     amount: float
     month: str
+    semester: str
     year: int
     description: Optional[str] = None
     status: str
@@ -126,6 +135,7 @@ async def store_payment(student_id: str, payment: Payment):
                 "$elemMatch": {
                     "debt_id": payment.debt_id,
                     "month": payment.month,
+                    "semester": payment.semester,
                     "year": payment.year
                 }
             }
@@ -135,7 +145,7 @@ async def store_payment(student_id: str, payment: Payment):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Ya existe un pago registrado para la deuda {
-                    payment.debt_id} en {payment.month}/{payment.year}"
+                    payment.debt_id} del estudiante con ID {student_id} el {payment.month}/{payment.year}"
             )
         existing_payment = payments_collection.find_one(
             {"payments": {"$elemMatch": {"payment_id": payment.payment_id}}}
@@ -174,7 +184,14 @@ async def store_payment(student_id: str, payment: Payment):
             )
 
         student.pop('_id', None)
-        return {"msg": "Pago registrado correctamente!", "student_payments": student}
+
+        publish_event(f"debts.{payment.debt_id}.updated",
+                      {
+            "origin_service": "payments",
+            "student_id": student_id,
+            "data": payment.dict()
+        })
+        return {"msg": "Pago registrado correctamente!", "student_payments": "student"}
 
     except HTTPException:
         raise
@@ -206,6 +223,13 @@ async def update_payment(student_id: str, payment_id: str, update_payment: Updat
             k: v for k, v in update_payment.model_dump().items()
             if v is not None
         }
+
+        if len(update_data) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No se proporcionaron datos para actualizar"
+            )
+
         update_data['updated_at'] = datetime.now()
 
         result = payments_collection.update_one(
@@ -332,7 +356,9 @@ async def delete_payment(student_id: str, payment_id: str):
                 "_id": 0,
                 "payment_id": "$payments.payment_id",
                 "debt_id": "$payments.debt_id",
+                "type": "$payments.type",
                 "amount": "$payments.amount",
+                "semester": "$payments.semester",
                 "month": "$payments.month",
                 "year": "$payments.year",
                 "status": "$payments.status",
@@ -384,7 +410,9 @@ async def get_payment(student_id: str, payment_id: str):
                 "_id": 0,
                 "payment_id": "$payments.payment_id",
                 "debt_id": "$payments.debt_id",
+                "type": "$payments.type",
                 "amount": "$payments.amount",
+                "semester": "$payments.semester",
                 "month": "$payments.month",
                 "year": "$payments.year",
                 "status": "$payments.status",
@@ -627,7 +655,9 @@ async def get_debt_payments(
                     "_id": 0,
                     "payment_id": "$payments.payment_id",
                     "debt_id": "$payments.debt_id",
+                    "type": "$payments.type",
                     "amount": "$payments.amount",
+                    "semester": "$payments.semester",
                     "month": "$payments.month",
                     "year": "$payments.year",
                     "status": "$payments.status",

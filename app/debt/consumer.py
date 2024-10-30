@@ -20,63 +20,62 @@ url = f"http://debt-container:8003/api/v1/"
 def callback(ch, method, properties, body):
 
     message = json.loads(body)
-    logger.info(f" [x] Received {message}")
-    origin_service = message.get('origin_service')
-    if origin_service == "payments":
-        logger.info("Ignoring message from the same service")
-        return
 
     event = method.routing_key
-    _, id, action = event.split('.')
+    _, debt_id, action = event.split('.')
 
     if action == "created":
         student_id = message.get("student_id")
         data = message.get("data")
         body = {
+            "debt_id": data["debt_id"],
+            "type": data["type"],
             "amount": data["amount"],
-            "description": data["description"],
-            "payment_id": data["payment_id"]
+            "month": data["month"],
+            "semester": data["semester"],
+            "year": data["year"],
+            "description": data["description"]
         }
         try:
             response = requests.post(
-                url+f"{student_id}/payments", json=body)
+                url+f"{student_id}/debts", json=body)
             response.raise_for_status()
-            logger.info("Detalles del pago:", response.json())
+            logger.info("✅ Arancel registrado")
         except requests.exceptions.RequestException as e:
-            logger.info("Error al realizar la request:", e)
-
-        logger.info("[x] Payment created")
+            logger.info("❌ Error al registrar el arancel:", e)
 
     elif action == "updated":
-
         student_id = message.get("student_id")
-        payment_id = message.get("payment_id")
         data = message.get("data")
         body = {
-            "amount": data["amount"],
-            "description": data["description"],
-            "status": data["status"]
+            "paid": True
         }
         try:
-            response = requests.put(
-                url+f"{student_id}/payments/{payment_id}", json=body)
-            response.raise_for_status()
-            logger.info("Detalles del pago actualizado:", response.json())
+            if data["type"] == "arancel":
+                response = requests.put(
+                    url+f"{student_id}/debts/{debt_id}", json=body)
+                response.raise_for_status()
+
+            if data["type"] == "matricula":
+                enrollment_id = debt_id
+                response = requests.put(
+                    url+f"{student_id}/enrollments/{enrollment_id}", json=body)
+                response.raise_for_status()
+
+            logger.info("✅ Arancel/Matricula actualizado(a)")
+
         except requests.exceptions.RequestException as e:
-            logger.info("Error al realizar la request:", e)
-        logger.info("[x] Payment updated")
+            logger.info("❌ Error al actualizar el arancel/matricula:", e)
 
     elif action == "deleted":
         student_id = message.get("student_id")
-        payment_id = message.get("payment_id")
         try:
             response = requests.delete(
-                url+f"{student_id}/payments/{payment_id}")
+                url+f"{student_id}/debts/{debt_id}")
             response.raise_for_status()
-            logger.info("Detalles del pago elimiado:", response.json())
+            logger.info("✅ Arancel/Matricula eliminado(a)")
         except requests.exceptions.RequestException as e:
-            logger.info("Error al realizar la request:", e)
-        logger.info("[x] Payment deleted")
+            logger.info("❌ Error al eliminar el arancel/matricula:", e)
 
     ch.basic_ack(delivery_tag=method.delivery_tag)
 

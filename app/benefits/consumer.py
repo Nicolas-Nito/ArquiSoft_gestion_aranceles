@@ -20,10 +20,9 @@ url = f"http://benefits-container:8001/api/v1/"
 def callback(ch, method, properties, body):
 
     message = json.loads(body)
-    logger.info(f" [x] Received {message}")
 
     event = method.routing_key
-    _, id, action = event.split('.')
+    _, benefit_id, action = event.split('.')
 
     if action == "created":
         student_id = message.get("student_id")
@@ -35,20 +34,19 @@ def callback(ch, method, properties, body):
             "end_date": data["end_date"],
             "name": data["name"],
             "start_date": data["start_date"],
-            "status": data["status"]
         }
         try:
-            response = requests.post(url+f"{student_id}/benefits", json=body)
+            response = requests.post(
+                url+f"{student_id}/benefits", json=body)
             response.raise_for_status()
-            logger.info("Detalles del beneficio:", response.json())
+            logger.info("✅ Beneficio registrado")
         except requests.exceptions.RequestException as e:
-            logger.info("Error al realizar la request:", e)
+            logger.info("❌ Error al registrar el beneficio:", e)
 
         logger.info("[x] benefit created")
 
     elif action == "updated":
         student_id = message.get("student_id")
-        benefit_id = message.get("benefit_id")
         data = message.get("data")
         body = {
             "amount": data["amount"],
@@ -56,30 +54,25 @@ def callback(ch, method, properties, body):
             "end_date": data["end_date"],
             "name": data["name"],
             "start_date": data["start_date"],
-            "status": data["status"]
+            "status": data["status"],
         }
         try:
             response = requests.put(
-                url+f"{student_id}/benefits/{benefit_id}", json=body)
+                url+f"{student_id}/benefist/{benefit_id}", json=body)
             response.raise_for_status()
-            logger.info("Detalles del beneficio actualizado:", response.json())
+            logger.info("✅ Beneficio actualizado")
         except requests.exceptions.RequestException as e:
-            logger.info("Error al realizar la request:", e)
-
-        logger.info("[x] Benefit updated")
+            logger.info("❌ Error al actualizar el beneficio:", e)
 
     elif action == "deleted":
         student_id = message.get("student_id")
-        benefit_id = message.get("benefit_id")
         try:
             response = requests.delete(
                 url+f"{student_id}/benefits/{benefit_id}")
             response.raise_for_status()
-            logger.info("Detalles del beneficio elimiando:", response.json())
+            logger.info("✅ Beneficio eliminado")
         except requests.exceptions.RequestException as e:
-            logger.info("Error al realizar la request:", e)
-
-        logger.info("[x] Benefit deleted")
+            logger.info("❌ Error al eliminar el beneficio:", e)
 
     ch.basic_ack(delivery_tag=method.delivery_tag)
 
