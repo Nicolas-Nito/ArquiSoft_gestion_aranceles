@@ -4,3 +4,4 @@ __pycache__
 celerybeat-schedule
 .DS_Store
 .venv
+kubeconfig.yaml
