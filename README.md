@@ -19,5 +19,5 @@
     #Acceso al cluster en ambiente UNIX:
             -Abre una terminal en la carpeta del proyecto y ejecuta: 
                     kubectl --kubeconfig=kubeconfig.yaml get pods
-                    export KUBECONFIG=kubeconfig.yaml.yaml
+                    export KUBECONFIG=kubeconfig.yaml
                     kubectl get pods
