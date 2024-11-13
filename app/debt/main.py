@@ -3,7 +3,7 @@ import json
 import threading
 from fastapi import FastAPI, Form, HTTPException, status, Query
 from pydantic import BaseModel
-
+from fastapi.middleware.cors import CORSMiddleware
 
 import time
 from bson.objectid import ObjectId
@@ -30,6 +30,13 @@ debts_collection = db["debt"]
 
 app = FastAPI()
 app.include_router(router)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # ----- Schemas ------
 

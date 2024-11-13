@@ -13,7 +13,7 @@ import pika
 from pika.exchange_type import ExchangeType
 from typing import Optional
 import json
-
+from fastapi.middleware.cors import CORSMiddleware
 # Obtener las credenciales desde el entorno
 rabbitmq_url = os.getenv("RABBITMQ_URL")
 mongo_user = os.getenv("MONGO_ADMIN_USER")
@@ -27,6 +27,13 @@ benefits_collection = db["benefits"]
 
 app = FastAPI()
 app.include_router(router)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # ----------------------Schemas-------------------------------
