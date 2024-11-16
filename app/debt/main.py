@@ -472,37 +472,21 @@ async def get_debt(student_id: str, debt_id: str):
     response_model=PaginatedDebtsResponse,
     status_code=status.HTTP_200_OK,
     summary="Obtener los aranceles de los estudiantes con paginación y filtros",
-    description="""
-    (FALTA DESCRIPCIÓN)
-    """, tags=["GET"]
+    description="""(FALTA DESCRIPCIÓN)""",
+    tags=["GET"]
 )
 async def get_debts(
     student_id: str,
     page: int = Query(default=1, ge=1, description="Page number"),
-    page_size: int = Query(default=10, ge=1, le=100,
-                           description="Items per page"),
-    status: Optional[DebtStatus] = Query(
-        default=None, description="Filter by debt status"),
-    paid: Optional[DebtPaid] = Query(
-        default=None, description="Filter by debt paid"),
-    min_amount: Optional[float] = Query(
-        default=None, ge=0, description="Minimum debt amount"),
-    max_amount: Optional[float] = Query(
-        default=None, ge=0, description="Maximum debt amount"),
-    from_date: Optional[datetime] = Query(
-        default=None, description="Filter debts from this date"),
-    to_date: Optional[datetime] = Query(
-        default=None, description="Filter debts until this date"),
-    sort_by: Optional[str] = Query(
-        default="created_at",
-        enum=["created_at", "amount", "debt_id"],
-        description="Field to sort by"
-    ),
-    sort_order: Optional[str] = Query(
-        default="desc",
-        enum=["asc", "desc"],
-        description="Sort order"
-    )
+    page_size: int = Query(default=10, ge=1, le=100, description="Items per page"),
+    status: Optional[DebtStatus] = Query(default=None, description="Filter by debt status"),
+    paid: Optional[DebtPaid] = Query(default=None, description="Filter by debt paid"),
+    min_amount: Optional[float] = Query(default=None, ge=0, description="Minimum debt amount"),
+    max_amount: Optional[float] = Query(default=None, ge=0, description="Maximum debt amount"),
+    from_date: Optional[datetime] = Query(default=None, description="Filter debts from this date"),
+    to_date: Optional[datetime] = Query(default=None, description="Filter debts until this date"),
+    sort_by: Optional[str] = Query(default="created_at", enum=["created_at", "amount", "debt_id"], description="Field to sort by"),
+    sort_order: Optional[str] = Query(default="desc", enum=["asc", "desc"], description="Sort order")
 ):
     try:
         student = debts_collection.find_one({"student_id": student_id})
@@ -518,7 +502,6 @@ async def get_debts(
             filter_conditions["debts.status"] = status.value
         if paid:
             filter_conditions["debts.paid"] = paid.value
-
         if min_amount is not None:
             filter_conditions["debts.amount"] = {"$gte": min_amount}
         if max_amount is not None:
@@ -526,7 +509,6 @@ async def get_debts(
                 **filter_conditions.get("debts.amount", {}),
                 "$lte": max_amount
             }
-
         if from_date:
             filter_conditions["debts.created_at"] = {"$gte": from_date}
         if to_date:
@@ -535,37 +517,35 @@ async def get_debts(
                 "$lte": to_date
             }
 
+        sort_direction = pymongo.DESCENDING if sort_order == "desc" else pymongo.ASCENDING
         pipeline = [
             {"$match": match_conditions},
             {"$unwind": "$debts"},
-        ]
-
-        if filter_conditions:
-            pipeline.append({"$match": filter_conditions})
-
-        sort_direction = pymongo.DESCENDING if sort_order == "desc" else pymongo.ASCENDING
-        pipeline.append({"$sort": {f"debts.{sort_by}": sort_direction}})
-
-        count_pipeline = pipeline.copy()
-        count_pipeline.append({"$count": "total"})
-        total_count = list(debts_collection.aggregate(count_pipeline))
-        total = total_count[0]["total"] if total_count else 0
-
-        pipeline.extend([
+            {"$match": filter_conditions} if filter_conditions else {"$match": {}},
+            {"$sort": {f"debts.{sort_by}": sort_direction}},
             {"$skip": (page - 1) * page_size},
             {"$limit": page_size},
             {
                 "$project": {
                     "_id": 0,
                     "debt_id": "$debts.debt_id",
+                    "type": "$debts.type",
                     "amount": "$debts.amount",
-                    "status": "$debts.status",
+                    "month": "$debts.month",
+                    "semester": "$debts.semester",
+                    "year": "$debts.year",
                     "description": "$debts.description",
+                    "paid": "$debts.paid",
+                    "status": "$debts.status",
                     "created_at": "$debts.created_at",
-                    "updated_at": "$debts.updated_at"
+                    "updated_at": "$debts.updated_at",
                 }
             }
-        ])
+        ]
+        count_pipeline = pipeline.copy()
+        count_pipeline.append({"$count": "total"})
+        total_count = list(debts_collection.aggregate(count_pipeline))
+        total = total_count[0]["total"] if total_count else 0
 
         debts = list(debts_collection.aggregate(pipeline))
 
@@ -584,7 +564,7 @@ async def get_debts(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"A ocurrido un error inesperado: {str(e)}"
+            detail=f"Se produjo un error inesperado: {str(e)}"
         )
 
 # Registrar matricula:

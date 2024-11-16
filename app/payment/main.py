@@ -550,7 +550,12 @@ async def get_payments(
                 "$project": {
                     "_id": 0,
                     "payment_id": "$payments.payment_id",
+                    "debt_id": "$payments.debt_id",
+                    "type": "$payments.type",
                     "amount": "$payments.amount",
+                    "month": "$payments.month",
+                    "semester": "$payments.semester",
+                    "year": "$payments.year",
                     "status": "$payments.status",
                     "description": "$payments.description",
                     "created_at": "$payments.created_at",
