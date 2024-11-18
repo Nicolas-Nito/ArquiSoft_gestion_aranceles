@@ -7,11 +7,11 @@
 #Para el despliegue en Kubernetes:
     #Despliegue local:
             -Inserta el archivo confidencial "kubeconfig.yaml" en la carpeta del proyecto
-            -En el archivo kubernetes reemplaza lex9884 por [TU-USUARIO-DOCKER]
+            -En el archivo kubernetes reemplaza tokifelipe por [TU-USUARIO-DOCKER]
             -Inicia sesion en docker con tu [TU-USUARIO-DOCKER] : docker login [TU-USUARIO-DOCKER]
             -Desde la carpeta app abrir una terminal y Ejecutar: 
                 docker build -t [TU-USUARIO-DOCKER]/tarea-unidad-04:latest -f deploy/local/python.Dockerfile .
-                docker build -t [TU-USUARIO-DOCKER]/tarea-unidad-04:latest -f deploy/local/python.Dockerfile .
+                docker push [TU-USUARIO-DOCKER]/tarea-unidad-04:latest
             -Ejecuta el comando:
                  kubectl apply -f kubernetes.yaml
                  kubectl apply -f hpa.yaml

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from dotenv import load_dotenv
 
-from .routers import benefits
+from app.benefits import main as benefits
 import logging
 
 from fastapi.middleware.cors import CORSMiddleware

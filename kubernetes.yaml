@@ -105,23 +105,23 @@ spec:
                   key: RABBITMQ_PASS
 
 ---
-# Deployment para gestion-aranceles
+# Deployment para aranceles-app
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: gestion-aranceles
+  name: aranceles-app
 spec:
   selector:
     matchLabels:
-      app: gestion-aranceles
+      app: aranceles-app
   template:
     metadata:
       labels:
-        app: gestion-aranceles
+        app: aranceles-app
     spec:
       containers:
         - name: gestion-aranceles
-          image: lex9884/tarea-unidad-04:latest
+          image: tokifelipe/tarea-unidad-04:latest
           ports:
             - containerPort: 8000
           command:
@@ -143,34 +143,12 @@ spec:
                   name: app-config
                   key: RABBITMQ_URL
 
-# Deployment para debt-container
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: debt-container
-spec:
-  selector:
-    matchLabels:
-      app: debt-container
-  template:
-    metadata:
-      labels:
-        app: debt-container
-    spec:
-      containers:
         - name: debt-container
-          image: lex9884/tarea-unidad-04:latest
+          image: tokifelipe/tarea-unidad-04:latest
           ports:
             - containerPort: 8003
           command:
-            [
-              'uvicorn',
-              'app.debt.main:app',
-              '--host',
-              '0.0.0.0',
-              '--port',
-              '8003',
-            ]
+            ['uvicorn', 'app.debt.main:app', '--host', '0.0.0.0', '--port', '8003']
           env:
             - name: MONGO_ADMIN_USER
               valueFrom:
@@ -187,36 +165,13 @@ spec:
                 configMapKeyRef:
                   name: app-config
                   key: RABBITMQ_URL
----
 
-# deployments para payment-container
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: payment-container
-spec:
-  selector:
-    matchLabels:
-      app: payment-container
-  template:
-    metadata:
-      labels:
-        app: payment-container
-    spec:
-      containers:
         - name: payment-container
-          image: lex9884/tarea-unidad-04:latest
+          image: tokifelipe/tarea-unidad-04:latest
           ports:
             - containerPort: 8002
           command:
-            [
-              'uvicorn',
-              'app.payment.main:app',
-              '--host',
-              '0.0.0.0',
-              '--port',
-              '8002',
-            ]
+            ['uvicorn', 'app.payment.main:app', '--host', '0.0.0.0', '--port', '8002']
           env:
             - name: MONGO_ADMIN_USER
               valueFrom:
@@ -234,35 +189,72 @@ spec:
                   name: app-config
                   key: RABBITMQ_URL
 
----
-# deployments para benefits-container
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: benefits-container
-spec:
-  selector:
-    matchLabels:
-      app: benefits-container
-  template:
-    metadata:
-      labels:
-        app: benefits-container
-    spec:
-      containers:
         - name: benefits-container
-          image: lex9884/tarea-unidad-04:latest
+          image: tokifelipe/tarea-unidad-04:latest
           ports:
             - containerPort: 8001
           command:
-            [
-              'uvicorn',
-              'app.benefits.main:app',
-              '--host',
-              '0.0.0.0',
-              '--port',
-              '8001',
-            ]
+            ['uvicorn', 'app.benefits.main:app', '--host', '0.0.0.0', '--port', '8001']
+          env:
+            - name: MONGO_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: MONGO_ADMIN_USER
+            - name: MONGO_ADMIN_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: MONGO_ADMIN_PASS
+            - name: RABBITMQ_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: RABBITMQ_URL
+
+        - name: debt-consumer
+          image: tokifelipe/tarea-unidad-04:latest
+          command: ["python", "-m", "app.debt.consumer"]
+          env:
+            - name: MONGO_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: MONGO_ADMIN_USER
+            - name: MONGO_ADMIN_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: MONGO_ADMIN_PASS
+            - name: RABBITMQ_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: RABBITMQ_URL
+
+        - name: payment-consumer
+          image: tokifelipe/tarea-unidad-04:latest
+          command: ["python", "-m", "app.payment.consumer"]
+          env:
+            - name: MONGO_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: MONGO_ADMIN_USER
+            - name: MONGO_ADMIN_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: MONGO_ADMIN_PASS
+            - name: RABBITMQ_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: RABBITMQ_URL
+
+        - name: benefits-consumer
+          image: tokifelipe/tarea-unidad-04:latest
+          command: ["python", "-m", "app.benefits.consumer"]
           env:
             - name: MONGO_ADMIN_USER
               valueFrom:
@@ -281,111 +273,6 @@ spec:
                   key: RABBITMQ_URL
 
 ---
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: debt-consumer
-spec:
-  selector:
-    matchLabels:
-      app: debt-consumer
-  template:
-    metadata:
-      labels:
-        app: debt-consumer
-    spec:
-      containers:
-      - name: debt-consumer
-        image: lex9884/tarea-unidad-04:latest
-        command: ["python", "-m", "app.debt.consumer"]
-        env:
-        - name: MONGO_ADMIN_USER
-          valueFrom:
-            secretKeyRef:
-              name: app-secrets
-              key: MONGO_ADMIN_USER
-        - name: MONGO_ADMIN_PASS
-          valueFrom:
-            secretKeyRef:
-              name: app-secrets
-              key: MONGO_ADMIN_PASS
-        - name: RABBITMQ_URL
-          valueFrom:
-            configMapKeyRef:
-              name: app-config
-              key: RABBITMQ_URL
-
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: payment-consumer
-spec:
-  selector:
-    matchLabels:
-      app: payment-consumer
-  template:
-    metadata:
-      labels:
-        app: payment-consumer
-    spec:
-      containers:
-      - name: payment-consumer
-        image: lex9884/tarea-unidad-04:latest
-        command: ["python", "-m", "app.payment.consumer"]
-        env:
-        - name: MONGO_ADMIN_USER
-          valueFrom:
-            secretKeyRef:
-              name: app-secrets
-              key: MONGO_ADMIN_USER
-        - name: MONGO_ADMIN_PASS
-          valueFrom:
-            secretKeyRef:
-              name: app-secrets
-              key: MONGO_ADMIN_PASS
-        - name: RABBITMQ_URL
-          valueFrom:
-            configMapKeyRef:
-              name: app-config
-              key: RABBITMQ_URL
-
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: benefits-consumer
-spec:
-  selector:
-    matchLabels:
-      app: benefits-consumer
-  template:
-    metadata:
-      labels:
-        app: benefits-consumer
-    spec:
-      containers:
-      - name: benefits-consumer
-        image: lex9884/tarea-unidad-04:latest
-        command: ["python", "-m", "app.benefits.consumer"]
-        env:
-        - name: MONGO_ADMIN_USER
-          valueFrom:
-            secretKeyRef:
-              name: app-secrets
-              key: MONGO_ADMIN_USER
-        - name: MONGO_ADMIN_PASS
-          valueFrom:
-            secretKeyRef:
-              name: app-secrets
-              key: MONGO_ADMIN_PASS
-        - name: RABBITMQ_URL
-          valueFrom:
-            configMapKeyRef:
-              name: app-config
-              key: RABBITMQ_URL
----
-
 # Services
 apiVersion: v1
 kind: Service
@@ -419,54 +306,25 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: gestion-aranceles
+  name: aranceles-app
 spec:
   type: LoadBalancer
   selector:
-    app: gestion-aranceles
+    app: aranceles-app
   ports:
-    - port: 80
+    - name: gestion-aranceles
+      port: 80
       targetPort: 8000
       nodePort: 30000
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: debt-container
-spec:
-  type: LoadBalancer
-  selector:
-    app: debt-container
-  ports:
-    - port: 8003
+    - name: debt
+      port: 8003
       targetPort: 8003
       nodePort: 30003
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: payment-container
-spec:
-  type: LoadBalancer
-  selector:
-    app: payment-container
-  ports:
-    - port: 8002
+    - name: payment
+      port: 8002
       targetPort: 8002
       nodePort: 30002
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: benefits-container
-spec:
-  type: LoadBalancer
-  selector:
-    app: benefits-container
-  ports:
-    - port: 8001
+    - name: benefits
+      port: 8001
       targetPort: 8001
       nodePort: 30001
